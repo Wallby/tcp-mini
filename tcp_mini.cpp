@@ -147,7 +147,7 @@ struct match_a_t
 	int socket;
 	int otherSockets[4]; //< sockets on which to listen to messages from b(s)
 	String otherIPs[4];
-	int numOtherSockets = 0;
+	int numOtherSockets = 0; //< NOTE: the index is not suitable for use as index elsewhere, as the index of one b might change when another b disconnects
 };
 struct match_b_t
 {
@@ -166,6 +166,26 @@ void* match;
 //*********************************************************
 
 //#ifdef TCP_MINI_MATCH
+void (*on_connected_to_us)(char* ip);
+void (*on_hung_up)(char* ip);
+
+extern "C" int tm_set_on_connected_to_us(void(*a)(char*))
+{
+	on_connected_to_us = a;
+}
+extern "C" int tm_unset_on_connected_to_us()
+{
+	on_connected_to_us = 0;
+}
+extern "C" int tm_set_on_hung_up(void(*a)(char*))
+{
+	on_hung_up = a;
+}
+extern "C" int tm_unset_on_hung_up()
+{
+	on_hung_up = 0;
+}
+
 // can new match to match_a_t
 // delete match when it is match_a_t
 extern "C" int tm_become_a_match(int port)
@@ -219,6 +239,7 @@ extern "C" int tm_become_a_match(int port)
   c->otherSockets[c->numOtherSockets] = i;
   c->otherIPs[c->numOtherSockets] = j->h_name;
   ++c->numOtherSockets;
+  on_connected_to_us(c->otherIPs[c->numOtherSockets - 1]);
 
   return 1;
 }
@@ -447,16 +468,21 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
 	  return -1; //< message with empty header is not allowed
   }
 
-  int g = d+c;
-
-  if(g > TCP_MINI_MAX_MESSAGE_SIZE)
+  int h = d+c;
+  if(h > TCP_MINI_MAX_MESSAGE_SIZE)
   {
     return -1; //< message not send, it is too big
   }
 
+  int g = sizeof(int)+d+c; //< prepend the size of the message before the message
+
   char* buffer = new char[g];
-  memcpy(&buffer[0], a, d);
-  memcpy(&buffer[d], b, c);
+  int i = 0;
+  memcpy(&buffer[i], &h, sizeof(int));
+  i += sizeof(int);
+  memcpy(&buffer[i], a, d);
+  i += d;
+  memcpy(&buffer[i], b, c);
 
   match_t* e = (match_t*)match;
   switch(e->c)
@@ -567,59 +593,89 @@ extern "C" int tm_poll(int max_messages)
 
       int b = 0;
 
-      for(int i = 0; i < d->numOtherSockets; ++i)
+      for(int i = 0; i < d->numOtherSockets;)
       {
     	  pollfd g;
     	  g.fd = d->otherSockets[i];
     	  g.events = POLLIN;
     	  //< NOTE: can poll be called multiple times if there are messages "queued up"?
     	  int h = poll(&g, 1, 0);
-    	  while(!(h == -1 | h == 0) && g.revents != 0)
-    	  {
-    		  printf("%hi\n", g.revents);
-			  int f = get_index_of_first_in_bitfield(g.revents);
-			  switch(f)
-			  {
-			  case 0: /* POLLIN */
-				  {
-					  if(b < max_messages)
-					  {
-						  // NOTE: maybe secretly prepend the size of the message
-						  MAX_MESSAGE_T j;
-						  int k = read(d->otherSockets[i], &j, sizeof j);
-						  on_receive((tm_message_t*)&j, k);
+    	  //< NOTE: perhaps call poll once with an array of all file descriptors?
 
-						  ++b;
-					  }
-				  }
-				  break;
-			  case 1: /* POLLPRI */
-				  break;
-			  case 2: /* POLLOUT */
-				  break;
-			  case 3: /* POLLERR */
-				  break;
-			  case 4: /* POLLHUP */
-				  break;
-			  case 5: /* POLLNVAL */
-				  break;
-			  case 6: /* POLLRDNORM */
-				  break;
-			  case 7: /* POLLRDBAND */
-				  break;
-			  case 8: /* POLLWRNORM */
-				  break;
-			  case 9: /* POLLWRBAND */
-				  break;
-			  case 10: /* POLLMSG */
-				  break;
-			  case 12: /* POLLREMOVE */
-				  break;
-			  case 13: /* POLLRDHUP */
-				  break;
+    	  if(!(h == -1 | h == 0))
+    	  {
+    		  char p;
+			  char o = recv(d->otherSockets[i], &p, 1, MSG_PEEK);
+			  if(o == 0)
+			  {
+				  // empty message, this means the other socket has hung up (I think)
+				  --d->numOtherSockets;
+				  memcpy(&d->otherSockets[i], &d->otherSockets[i+1], d->numOtherSockets - i);
+				  // NOTE: d->numOtherSockets - i == "remaining sockets"
+
+				  on_hung_up(d->otherIPs[i]);
+				  memcpy(&d->otherIPs[i], &d->otherIPs[i+1], d->numOtherSockets - i);
+
+				  continue; //< onto the next socket
 			  }
-	    	  g.revents = remove_from_bitfield(f, g.revents);
+
+			  while(g.revents != 0)
+			  {
+				  printf("g.revents %hi\n", g.revents);
+				  int f = get_index_of_first_in_bitfield(g.revents);
+				  switch(f)
+				  {
+				  case 0: /* POLLIN */
+					  {
+						  if(b < max_messages)
+						  {
+							  // first sizeof(int) bytes store the size of the message.
+							  int l;
+							  /*int m =*/ read(d->otherSockets[i], &l, sizeof(int));
+
+							  // NOTE: if (m != sizeof(int)) should not happen
+							  printf("l %i\n", l);
+							  char* n = new char[l];
+							  /*int k =*/ read(d->otherSockets[i], n, l);
+							  // NOTE: if (k != l) should not happen
+							  on_receive((tm_message_t*)n, l);
+							  delete n;
+
+							  ++b;
+						  }
+					  }
+					  break;
+				  case 1: /* POLLPRI */
+					  break;
+				  case 2: /* POLLOUT */
+					  break;
+				  case 3: /* POLLERR */
+					  break;
+				  case 4: /* POLLHUP */
+					  break;
+				  case 5: /* POLLNVAL */
+					  break;
+				  case 6: /* POLLRDNORM */
+					  break;
+				  case 7: /* POLLRDBAND */
+					  break;
+				  case 8: /* POLLWRNORM */
+					  break;
+				  case 9: /* POLLWRBAND */
+					  break;
+				  case 10: /* POLLMSG */
+					  break;
+				  case 12: /* POLLREMOVE */
+					  break;
+				  case 13: /* POLLRDHUP */
+					  break;
+				  }
+				  g.revents = remove_from_bitfield(f, g.revents);
+				  printf("g.revents %i\n", g.revents);
+			  }
     	  }
+
+    	  ++i; //< advance to next socket
       }
 	}
 

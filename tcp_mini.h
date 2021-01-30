@@ -36,8 +36,12 @@ TCP_MINI_FUNCTION int tm_become_a_match(int port);
 TCP_MINI_FUNCTION int tm_send_to(struct tm_message_t* a, int d, void* b, int c, char* ip);
 
 //void(*on_connected_to_us)(char* ip)
-TCP_MINI_FUNCTION int set_on_connected_to_us(void(*a)(char*));
-TCP_MINI_FUNCTION int unset_on_connected_to_us();
+TCP_MINI_FUNCTION int tm_set_on_connected_to_us(void(*a)(char*));
+TCP_MINI_FUNCTION int tm_unset_on_connected_to_us();
+
+//void(*on_hung_up)(char* ip)
+TCP_MINI_FUNCTION int tm_set_on_hung_up(void(*a)(char*));
+TCP_MINI_FUNCTION int tm_unset_on_hung_up();
 #endif
 
 #ifdef TCP_MINI_SCOUT
@@ -89,6 +93,7 @@ int tm_get_port(); //< will return port for "match | scout" depending on which i
 //< will call on_receive for each "polled" message
 //< will return 0 if no more messages left to process or 1 if there are
 TCP_MINI_FUNCTION int tm_poll(int max_messages);
+//< NOTE: a is the exact number of bytes that the message holds.
 //void(*on_receive)(message_t* message, int a);
 TCP_MINI_FUNCTION void tm_set_on_receive(void(*a)(struct tm_message_t*, int));
 TCP_MINI_FUNCTION void tm_unset_on_receive();
