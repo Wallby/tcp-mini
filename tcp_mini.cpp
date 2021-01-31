@@ -221,7 +221,7 @@ extern "C" int tm_become_a_match(int port)
 
   match_a_t* c = (match_a_t*)match; //< convention is to avoid a/b here to avoid confusion
   c->port = port;
-  c->socket = socket(AF_INET, SOCK_STREAM /* TCP */ /*| SOCK_NONBLOCK*/, 0);
+  c->socket = socket(AF_INET, SOCK_STREAM /* TCP */ | SOCK_NONBLOCK, 0);
   if(c->socket == -1)
   {
 	  // NOTE: I am not sure if this is likely to fail, though EACCES seems like it "could" happen
@@ -245,30 +245,6 @@ extern "C" int tm_become_a_match(int port)
   }
 
   listen(c->socket, 1); //< errors that can occur here should be caught by bind
-
-  sockaddr_in g;
-  socklen_t h = sizeof g;
-  int i = accept(c->socket, (sockaddr*)&g, &h);
-
-  hostent* j = gethostbyaddr((void*)&g.sin_addr, sizeof g.sin_addr, AF_INET);
-  if(j == NULL)
-  {
-    // kick the player from the lobby (can't obtain a readable ip)
-  }
-
-  c->otherSockets[c->numOtherSockets] = i;
-  if(j->h_name != NULL)
-  {
-	  c->otherIPs[c->numOtherSockets] = j->h_name;
-  }
-  else
-  {
-	  // TODO: copy addr as readable string
-	  c->otherIPs[c->numOtherSockets] = "ok";
-  }
-
-  ++c->numOtherSockets;
-  on_connected_to_us(c->otherIPs[c->numOtherSockets - 1]);
 
   return 1;
 }
@@ -584,8 +560,19 @@ extern "C" int tm_poll(int max_messages)
 					  }
 
 					  d->otherSockets[d->numOtherSockets] = i;
-					  d->otherIPs[d->numOtherSockets] = j->h_name;
+
+					  if(j->h_name != NULL)
+					  {
+						  d->otherIPs[d->numOtherSockets] = j->h_name;
+					  }
+					  else
+					  {
+						  // TODO: copy addr as readable string
+						  d->otherIPs[d->numOtherSockets] = "ok";
+					  }
 					  ++d->numOtherSockets;
+
+					  on_connected_to_us(d->otherIPs[d->numOtherSockets - 1]);
 				  }
 			  }
 			  break;
