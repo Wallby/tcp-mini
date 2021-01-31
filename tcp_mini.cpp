@@ -113,11 +113,13 @@ enum EMatchType
 class String
 {
 public:
-	String() {};
-	String(char* a)
+	String()
 	{
-		this->a = new char[length(a) + 1];
-		strcpy(this->a, a);
+	};
+	String(char* b/*a*/)
+	{
+		this->a = new char[length(b) + 1];
+		strcpy(this->a, b);
 	}
 	~String()
 	{
@@ -127,13 +129,31 @@ public:
 		}
 	}
 
+	void operator=(const String& b)
+	{
+		if(this->a != NULL)
+		{
+			delete this->a;
+		}
+
+		if(b.a != NULL)
+		{
+			this->a = new char[length(b.a) + 1];
+			strcpy(this->a, b.a);
+		}
+		else
+		{
+			a = NULL;
+		}
+	}
+
 	operator char*() //< (char*) (should also work for char* .. = (String) ..)
 	{
 		return a;
 	}
 
 private:
-	char* a;
+	char* a = NULL;
 };
 
 struct match_t
@@ -145,8 +165,8 @@ struct match_a_t
 	int c = EMatchType_A;
 	int port;
 	int socket;
-	int otherSockets[4]; //< sockets on which to listen to messages from b(s)
-	String otherIPs[4];
+	int otherSockets[TM_MAXCONNECTIONS]; //< sockets on which to listen to messages from b(s)
+	String otherIPs[TM_MAXCONNECTIONS];
 	int numOtherSockets = 0; //< NOTE: the index is not suitable for use as index elsewhere, as the index of one b might change when another b disconnects
 };
 struct match_b_t
@@ -237,7 +257,16 @@ extern "C" int tm_become_a_match(int port)
   }
 
   c->otherSockets[c->numOtherSockets] = i;
-  c->otherIPs[c->numOtherSockets] = j->h_name;
+  if(j->h_name != NULL)
+  {
+	  c->otherIPs[c->numOtherSockets] = j->h_name;
+  }
+  else
+  {
+	  // TODO: copy addr as readable string
+	  c->otherIPs[c->numOtherSockets] = "ok";
+  }
+
   ++c->numOtherSockets;
   on_connected_to_us(c->otherIPs[c->numOtherSockets - 1]);
 
@@ -499,8 +528,8 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
   case EMatchType_B:
       {
 	    match_b_t* f = (match_b_t*)e;
-	    printf("d\n");
 	    write(f->socket, buffer, g);
+	    printf("sent message of %i bytes (including size bytes)\n", g);
       }
       return 1;
   }
@@ -528,7 +557,6 @@ extern "C" int tm_poll(int max_messages)
       int e = poll(&a, 1, 0); //< NOTE: at the time of writing this, there is only one connection request accepted at a time
       while(!(e == -1 | e == 0) && a.revents != 0) //< NOTE: poll can fail if interrupted (EINTR), not sure though if this applies if timeout value is 0
       {
-		  //printf("hmm\n");
 		  int f = get_index_of_first_in_bitfield(a.revents);
 		  switch(f)
 		  {
@@ -621,7 +649,7 @@ extern "C" int tm_poll(int max_messages)
 
 			  while(g.revents != 0)
 			  {
-				  printf("g.revents %hi\n", g.revents);
+				  printf("g.revents before %hi\n", g.revents);
 				  int f = get_index_of_first_in_bitfield(g.revents);
 				  switch(f)
 				  {
@@ -671,7 +699,7 @@ extern "C" int tm_poll(int max_messages)
 					  break;
 				  }
 				  g.revents = remove_from_bitfield(f, g.revents);
-				  printf("g.revents %i\n", g.revents);
+				  printf("g.revents after %i\n", g.revents);
 			  }
     	  }
 

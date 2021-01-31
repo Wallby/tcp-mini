@@ -23,6 +23,7 @@ struct tm_message_t
 //**************** phase 1 - matchmaking **********************
 
 #ifdef TCP_MINI_MATCH
+#define TM_MAXCONNECTIONS 4
 TCP_MINI_FUNCTION int tm_stop_being_a_match();
 // NOTE: returns 0 if failed to become a match, 1 if sucessfully become match
 //       returns -1 if no code was executed
