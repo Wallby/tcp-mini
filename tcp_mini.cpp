@@ -230,6 +230,10 @@ extern "C" int tm_become_a_match(int port)
 	  return 0;
   }
 
+  // NOTE: SO_REUSEADDR "makes TCP less reliable" according to https://www.man7.org/linux/man-pages/man7/ip.7.html
+  int d = 1;
+  setsockopt(c->socket, SOL_SOCKET, SO_REUSEADDR, &d, sizeof(int));
+
   sockaddr_in a;
   a.sin_family = AF_INET;
   a.sin_port = htons(port);
@@ -404,6 +408,10 @@ extern "C" int tm_connect(tm_match_blob_t a)
 		match = NULL; //< it seems to not make much sense to try to disconnect, when there is not even a socket up
 		return -1;
 	}
+
+	// NOTE: SO_REUSEADDR "makes TCP less reliable" according to https://www.man7.org/linux/man-pages/man7/ip.7.html
+	int f = 1;
+	setsockopt(d->socket, SOL_SOCKET, SO_REUSEADDR, &f, sizeof(int));
 
 	// if a is set via a.ip, hostname should catch that case
 	hostent* e = gethostbyname(a.hostname);
@@ -724,13 +732,12 @@ int poll_for_scout(match_b_t* c, int max_messages)
 	  if(o == 0)
 	  {
 		  // empty message, this means the other socket has hung up (I think)
+		  tm_disconnect();
+
 		  if(on_match_hung_up != NULL)
 		  {
 			 on_match_hung_up();
 		  }
-
-		  close(c->socket);
-		  delete match;
 
 		  return 0;
 	  }
