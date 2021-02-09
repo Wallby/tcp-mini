@@ -40,9 +40,11 @@ TCP_MINI_FUNCTION int tm_send_to(struct tm_message_t* a, int d, void* b, int c, 
 TCP_MINI_FUNCTION int tm_set_on_connected_to_us(void(*a)(char*));
 TCP_MINI_FUNCTION int tm_unset_on_connected_to_us();
 
-//void(*on_hung_up)(char* ip)
-TCP_MINI_FUNCTION int tm_set_on_hung_up(void(*a)(char*));
-TCP_MINI_FUNCTION int tm_unset_on_hung_up();
+// NOTE: void(*a)(char* ip)
+TCP_MINI_FUNCTION int tm_set_on_scout_hung_up(void(*a)(char*));
+TCP_MINI_FUNCTION int tm_unset_on_scout_hung_up();
+#define TM_SET_ON_HUNG_UP(a) tm_set_on_scout_hung_up(a)
+#define TM_UNSET_ON_HUNG_UP() tm_unset_on_scout_hung_up()
 #endif
 
 #ifdef TCP_MINI_SCOUT
@@ -74,6 +76,11 @@ TCP_MINI_FUNCTION int tm_connect(struct tm_match_blob_t a);
 //       returns -1 if no code was executed
 TCP_MINI_FUNCTION int tm_disconnect();
 
+TCP_MINI_FUNCTION void tm_set_on_match_hung_up(void(*a)());
+TCP_MINI_FUNCTION void tm_unset_on_match_hung_up();
+#define TM_SET_ON_HUNG_UP(a) tm_set_on_match_hung_up(a)
+#define TM_UNSET_ON_HUNG_UP() tm_unset_on_match_hung_up()
+
 char* tm_get_ip();
 //int get_port();
 #endif
@@ -93,6 +100,7 @@ int tm_get_port(); //< will return port for "match | scout" depending on which i
 
 //< will call on_receive for each "polled" message
 //< will return 0 if no more messages left to process or 1 if there are
+//< will return -1 if no code was executed
 TCP_MINI_FUNCTION int tm_poll(int max_messages);
 //< NOTE: a is the exact number of bytes that the message holds.
 //void(*on_receive)(message_t* message, int a);

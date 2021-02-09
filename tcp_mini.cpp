@@ -187,7 +187,7 @@ void* match;
 
 //#ifdef TCP_MINI_MATCH
 void (*on_connected_to_us)(char* ip);
-void (*on_hung_up)(char* ip);
+void (*on_scout_hung_up)(char* ip);
 
 extern "C" int tm_set_on_connected_to_us(void(*a)(char*))
 {
@@ -197,13 +197,13 @@ extern "C" int tm_unset_on_connected_to_us()
 {
 	on_connected_to_us = 0;
 }
-extern "C" int tm_set_on_hung_up(void(*a)(char*))
+extern "C" int tm_set_on_scout_hung_up(void(*a)(char*))
 {
-	on_hung_up = a;
+	on_scout_hung_up = a;
 }
-extern "C" int tm_unset_on_hung_up()
+extern "C" int tm_unset_on_scout_hung_up()
 {
-	on_hung_up = 0;
+	on_scout_hung_up = NULL;
 }
 
 // can new match to match_a_t
@@ -329,6 +329,17 @@ extern "C" int tm_send_to(tm_message_t* a, int d, void* b, int c, char* ip)
 //#endif
 
 //#ifdef TCP_MINI_SCOUT
+void(*on_match_hung_up)();
+
+extern "C" void tm_set_on_match_hung_up(void(*a)())
+{
+	on_match_hung_up = a;
+}
+extern "C" void tm_unset_on_match_hung_up()
+{
+	on_match_hung_up = NULL;
+}
+
 
 /*
  * provides a function to connect that can be overridden for different
@@ -513,26 +524,16 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
   return -1;
 }
 
-extern "C" int tm_poll(int max_messages)
+int poll_for_match(match_a_t* c, int max_messages)
 {
-	if(match == NULL)
+	// 1. check the listening socket (e.g. for pending connections)
+
+	pollfd a;
+	a.fd = c->socket;
+	a.events = POLLIN;
+	int e = poll(&a, 1, 0); //< NOTE: at the time of writing this, there is only one connection request accepted at a time
+	while(!(e == -1 | e == 0) && a.revents != 0) //< NOTE: poll can fail if interrupted (EINTR), not sure though if this applies if timeout value is 0
 	{
-		return -1;
-	}
-
-	match_t* c = (match_t*)match;
-	if(c->c == EMatchType_A)
-	{
-      match_a_t* d = (match_a_t*)c;
-
-      // 1. check the listening socket (e.g. for pending connections)
-
-      pollfd a;
-      a.fd = d->socket;
-      a.events = POLLIN;
-      int e = poll(&a, 1, 0); //< NOTE: at the time of writing this, there is only one connection request accepted at a time
-      while(!(e == -1 | e == 0) && a.revents != 0) //< NOTE: poll can fail if interrupted (EINTR), not sure though if this applies if timeout value is 0
-      {
 		  int f = get_index_of_first_in_bitfield(a.revents);
 		  switch(f)
 		  {
@@ -540,14 +541,14 @@ extern "C" int tm_poll(int max_messages)
 			  {
 				  sockaddr_in g;
 				  socklen_t h = sizeof g;
-				  int i = accept(d->socket, (sockaddr*)&g, &h);
+				  int i = accept(c->socket, (sockaddr*)&g, &h);
 				  // NOTE: documentation says that h might be greater than sizeof g now (should this be checked for?)
 				  if(i == -1)
 				  {
 					  // TODO: make sure that the errors that can be thrown here are managed..?
 					  break;
 				  }
-				  if(d->numOtherSockets == length(d->otherSockets))
+				  if(c->numOtherSockets == length(c->otherSockets))
 				  {
 					  // refuse ("lobby is full")
 				  }
@@ -556,23 +557,23 @@ extern "C" int tm_poll(int max_messages)
 					  hostent* j = gethostbyaddr((void*)&g.sin_addr, sizeof g.sin_addr, AF_INET);
 					  if(j == NULL)
 					  {
-                        // kick the player from the lobby (can't obtain a readable ip)
+					    // kick the player from the lobby (can't obtain a readable ip)
 					  }
 
-					  d->otherSockets[d->numOtherSockets] = i;
+					  c->otherSockets[c->numOtherSockets] = i;
 
 					  if(j->h_name != NULL)
 					  {
-						  d->otherIPs[d->numOtherSockets] = j->h_name;
+						  c->otherIPs[c->numOtherSockets] = j->h_name;
 					  }
 					  else
 					  {
 						  // TODO: copy addr as readable string
-						  d->otherIPs[d->numOtherSockets] = "ok";
+						  c->otherIPs[c->numOtherSockets] = "ok";
 					  }
-					  ++d->numOtherSockets;
+					  ++c->numOtherSockets;
 
-					  on_connected_to_us(d->otherIPs[d->numOtherSockets - 1]);
+					  on_connected_to_us(c->otherIPs[c->numOtherSockets - 1]);
 				  }
 			  }
 			  break;
@@ -602,34 +603,39 @@ extern "C" int tm_poll(int max_messages)
 			  break;
 		  }
 		  a.revents = remove_from_bitfield(f, a.revents);
-      }
+	}
 
-      // 2. check for messages on sockets of peers
+	// 2. check for messages on sockets of peers
 
-      int b = 0;
+	int b = 0;
 
-      for(int i = 0; i < d->numOtherSockets;)
-      {
-    	  pollfd g;
-    	  g.fd = d->otherSockets[i];
-    	  g.events = POLLIN;
-    	  //< NOTE: can poll be called multiple times if there are messages "queued up"?
-    	  int h = poll(&g, 1, 0);
-    	  //< NOTE: perhaps call poll once with an array of all file descriptors?
+	for(int i = 0; i < c->numOtherSockets;)
+	{
+		  pollfd g;
+		  g.fd = c->otherSockets[i];
+		  g.events = POLLIN;
+		  //< NOTE: can poll be called multiple times if there are messages "queued up"?
+		  int h = poll(&g, 1, 0);
+		  //< NOTE: perhaps call poll once with an array of all file descriptors?
 
-    	  if(!(h == -1 | h == 0))
-    	  {
-    		  char p;
-			  char o = recv(d->otherSockets[i], &p, 1, MSG_PEEK);
+		  if(!(h == -1 | h == 0))
+		  {
+			  char p;
+			  char o = recv(c->otherSockets[i], &p, 1, MSG_PEEK);
 			  if(o == 0)
 			  {
 				  // empty message, this means the other socket has hung up (I think)
-				  --d->numOtherSockets;
-				  memcpy(&d->otherSockets[i], &d->otherSockets[i+1], d->numOtherSockets - i);
-				  // NOTE: d->numOtherSockets - i == "remaining sockets"
+				  --c->numOtherSockets;
+				  memcpy(&c->otherSockets[i], &c->otherSockets[i+1], c->numOtherSockets - i);
+				  // NOTE: c->numOtherSockets - i == "remaining sockets"
 
-				  on_hung_up(d->otherIPs[i]);
-				  memcpy(&d->otherIPs[i], &d->otherIPs[i+1], d->numOtherSockets - i);
+
+				  if(on_scout_hung_up != NULL)
+				  {
+					  on_scout_hung_up(c->otherIPs[i]);
+				  }
+
+				  memcpy(&c->otherIPs[i], &c->otherIPs[i+1], c->numOtherSockets - i);
 
 				  continue; //< onto the next socket
 			  }
@@ -646,17 +652,21 @@ extern "C" int tm_poll(int max_messages)
 						  {
 							  // first sizeof(int) bytes store the size of the message.
 							  int l;
-							  /*int m =*/ read(d->otherSockets[i], &l, sizeof(int));
+							  /*int m =*/ read(c->otherSockets[i], &l, sizeof(int));
 
 							  // NOTE: if (m != sizeof(int)) should not happen
 							  printf("l %i\n", l);
 							  char* n = new char[l];
-							  /*int k =*/ read(d->otherSockets[i], n, l);
+							  /*int k =*/ read(c->otherSockets[i], n, l);
 							  // NOTE: if (k != l) should not happen
 							  on_receive((tm_message_t*)n, l);
 							  delete n;
 
 							  ++b;
+						  }
+						  else
+						  {
+							  return 1; //< can't process any more messages this poll
 						  }
 					  }
 					  break;
@@ -688,14 +698,122 @@ extern "C" int tm_poll(int max_messages)
 				  g.revents = remove_from_bitfield(f, g.revents);
 				  printf("g.revents after %i\n", g.revents);
 			  }
-    	  }
+		  }
 
-    	  ++i; //< advance to next socket
-      }
+		  ++i; //< advance to next socket
 	}
 
+	return 0;
+}
 
-	// fetch message
-	// "char buffer[sizeof (int) * TCP_MINI_MAX_MESSAGE_SIZE];"
+int poll_for_scout(match_b_t* c, int max_messages)
+{
+	int b = 0;
 
+	pollfd g;
+	g.fd = c->socket;
+	g.events = POLLIN;
+	//< NOTE: can poll be called multiple times if there are messages "queued up"?
+	int h = poll(&g, 1, 0);
+	//< NOTE: perhaps call poll once with an array of all file descriptors?
+
+	if(!(h == -1 | h == 0))
+	{
+	  char p;
+	  char o = recv(c->socket, &p, 1, MSG_PEEK);
+	  if(o == 0)
+	  {
+		  // empty message, this means the other socket has hung up (I think)
+		  if(on_match_hung_up != NULL)
+		  {
+			 on_match_hung_up();
+		  }
+
+		  close(c->socket);
+		  delete match;
+
+		  return 0;
+	  }
+
+	  while(g.revents != 0)
+	  {
+		  printf("g.revents before %hi\n", g.revents);
+		  int f = get_index_of_first_in_bitfield(g.revents);
+		  switch(f)
+		  {
+		  case 0: /* POLLIN */
+			  {
+				  if(b < max_messages)
+				  {
+					  // first sizeof(int) bytes store the size of the message.
+					  int l;
+					  /*int m =*/ read(c->socket, &l, sizeof(int));
+
+					  // NOTE: if (m != sizeof(int)) should not happen
+					  printf("l %i\n", l);
+					  char* n = new char[l];
+					  /*int k =*/ read(c->socket, n, l);
+					  // NOTE: if (k != l) should not happen
+					  on_receive((tm_message_t*)n, l);
+					  delete n;
+
+					  ++b;
+				  }
+				  else
+				  {
+					  return 1; //< can't process any more messages this poll
+				  }
+			  }
+			  break;
+		  case 1: /* POLLPRI */
+			  break;
+		  case 2: /* POLLOUT */
+			  break;
+		  case 3: /* POLLERR */
+			  break;
+		  case 4: /* POLLHUP */
+			  break;
+		  case 5: /* POLLNVAL */
+			  break;
+		  case 6: /* POLLRDNORM */
+			  break;
+		  case 7: /* POLLRDBAND */
+			  break;
+		  case 8: /* POLLWRNORM */
+			  break;
+		  case 9: /* POLLWRBAND */
+			  break;
+		  case 10: /* POLLMSG */
+			  break;
+		  case 12: /* POLLREMOVE */
+			  break;
+		  case 13: /* POLLRDHUP */
+			  break;
+		  }
+		  g.revents = remove_from_bitfield(f, g.revents);
+		  printf("g.revents after %i\n", g.revents);
+	  }
+	}
+
+	return 0;
+}
+
+extern "C" int tm_poll(int max_messages)
+{
+	if(match == NULL)
+	{
+		return -1;
+	}
+
+	match_t* c = (match_t*)match;
+	if(c->c == EMatchType_A)
+	{
+      return poll_for_match((match_a_t*)c, max_messages);
+	}
+	if(c->c == EMatchType_B)
+	{
+      return poll_for_scout((match_b_t*)c, max_messages);
+	}
+
+	return -1;
 }
