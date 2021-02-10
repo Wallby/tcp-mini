@@ -437,6 +437,9 @@ extern "C" int tm_connect(tm_match_blob_t a)
 		return 0;
 	}
 
+	// once connected, enable O_NONBLOCK so that reading wont wait for data
+	fcntl(d->socket, F_SETFL, O_NONBLOCK);
+
 	return 1;
 }
 
@@ -535,6 +538,43 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
   return -1;
 }
 
+// NOTE: *c -> # bytes left available for reading
+// NOTE: b -> socket to process messages for
+// NOTE: *a -> # messages processed so far
+void process_messages(int* c, int b, int* a, int max_messages)
+{
+#define DO_IF_CANNOT_READ(q, p) if(*c < p) { q }
+	while(1)
+	{
+	  if(*a < max_messages || max_messages == -1)
+	  {
+		  // first sizeof(int) bytes store the size of the message.
+		  int l;
+		  DO_IF_CANNOT_READ(read(b, &l, *c); break;, sizeof(int)); //< read last bytes as to discard them and break
+		  /*int m =*/ read(b, &l, sizeof(int));
+		  *c -= sizeof(int);
+
+		  // NOTE: if (m != sizeof(int)) should not happen
+		  printf("l %i\n", l);
+		  char* n = new char[l];
+		  DO_IF_CANNOT_READ(read(b, n, *c); break;, l); //< read last bytes as to discard them and break
+		  /*int k =*/ read(b, n, l);
+		  *c -= l;
+
+		  // NOTE: if (k != l) should not happen
+		  on_receive((tm_message_t*)n, l);
+		  delete n;
+
+		  ++*a;
+	  }
+	  else
+	  {
+		  break; //< can't process any more messages this poll
+	  }
+	}
+#undef DO_IF_CANNOT_READ
+}
+
 int poll_for_match(match_a_t* c, int max_messages)
 {
 	// 1. check the listening socket (e.g. for pending connections)
@@ -622,7 +662,6 @@ int poll_for_match(match_a_t* c, int max_messages)
 
 	int b = 0;
 	int o; //< # bytes left available for reading
-#define DO_IF_CANNOT_READ(q, p) if(o < p) { q }
 
 	for(int i = 0; i < c->numOtherSockets;)
 	{
@@ -661,35 +700,7 @@ int poll_for_match(match_a_t* c, int max_messages)
 				  switch(f)
 				  {
 				  case 0: /* POLLIN */
-					  {
-						  while(1)
-						  {
-							  if(b < max_messages || max_messages == -1)
-							  {
-								  // first sizeof(int) bytes store the size of the message.
-								  int l;
-								  DO_IF_CANNOT_READ(read(c->otherSockets[i], &l, o); break;, sizeof(int)); //< read last bytes as to discard them and break
-								  /*int m =*/ read(c->otherSockets[i], &l, sizeof(int));
-								  o -= sizeof(int);
-
-								  // NOTE: if (m != sizeof(int)) should not happen
-								  printf("l %i\n", l);
-								  char* n = new char[l];
-								  DO_IF_CANNOT_READ(read(c->otherSockets[i], n, o); break;, l); //< read last bytes as to discard them and break
-								  /*int k =*/ read(c->otherSockets[i], n, l);
-								  o -= l;
-								  // NOTE: if (k != l) should not happen
-								  on_receive((tm_message_t*)n, l);
-								  delete n;
-
-								  ++b;
-							  }
-							  else
-							  {
-								  break; //< can't process any more messages this poll
-							  }
-						  }
-					  }
+					  process_messages(&o, c->otherSockets[i], &b, max_messages);
 					  break;
 				  case 1: /* POLLPRI */
 					  break;
@@ -725,25 +736,21 @@ int poll_for_match(match_a_t* c, int max_messages)
 	}
 
 	return o > 0;
-
-#undef DO_IF_CANNOT_READ
 }
 
 int poll_for_scout(match_b_t* c, int max_messages)
 {
-	int b = 0;
-
 	pollfd g;
 	g.fd = c->socket;
 	g.events = POLLIN;
-	//< NOTE: can poll be called multiple times if there are messages "queued up"?
 	int h = poll(&g, 1, 0);
-	//< NOTE: perhaps call poll once with an array of all file descriptors?
 
 	if(!(h == -1 | h == 0))
 	{
-	  char p;
-	  char o = recv(c->socket, &p, 1, MSG_PEEK);
+	  int b = 0;
+	  int o; //< # bytes left available for reading
+
+	  ioctl(c->socket, FIONREAD, &o);
 	  if(o == 0)
 	  {
 		  // empty message, this means the other socket has hung up (I think)
@@ -764,28 +771,7 @@ int poll_for_scout(match_b_t* c, int max_messages)
 		  switch(f)
 		  {
 		  case 0: /* POLLIN */
-			  {
-				  if(b < max_messages)
-				  {
-					  // first sizeof(int) bytes store the size of the message.
-					  int l;
-					  /*int m =*/ read(c->socket, &l, sizeof(int));
-
-					  // NOTE: if (m != sizeof(int)) should not happen
-					  printf("l %i\n", l);
-					  char* n = new char[l];
-					  /*int k =*/ read(c->socket, n, l);
-					  // NOTE: if (k != l) should not happen
-					  on_receive((tm_message_t*)n, l);
-					  delete n;
-
-					  ++b;
-				  }
-				  else
-				  {
-					  return 1; //< can't process any more messages this poll
-				  }
-			  }
+			  process_messages(&o, c->socket, &b, max_messages);
 			  break;
 		  case 1: /* POLLPRI */
 			  break;
@@ -815,6 +801,8 @@ int poll_for_scout(match_b_t* c, int max_messages)
 		  g.revents = remove_from_bitfield(f, g.revents);
 		  printf("g.revents after %i\n", g.revents);
 	  }
+
+	  return o > 0;
 	}
 
 	return 0;
