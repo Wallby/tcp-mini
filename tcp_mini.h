@@ -98,6 +98,7 @@ int tm_get_port(); //< will return port for "match | scout" depending on which i
 //< will return 0 if no more messages left to process or 1 if there are
 //int poll(struct message_t** messages, int* num_messages, int max_messages);
 
+//< NOTE: set max_messages to -1 to remove the limit (i.e. no # messages is "too much")
 //< will call on_receive for each "polled" message
 //< will return 0 if no more messages left to process or 1 if there are
 //< will return -1 if no code was executed

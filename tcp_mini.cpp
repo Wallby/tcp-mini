@@ -8,10 +8,13 @@
 #include <cstdio>
 
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <poll.h>
 #include <netdb.h>
+#include <fcntl.h>
+
 
 void* operator new[](std::size_t a)
 {
@@ -568,6 +571,8 @@ int poll_for_match(match_a_t* c, int max_messages)
 					    // kick the player from the lobby (can't obtain a readable ip)
 					  }
 
+					  fcntl(i, F_SETFL, O_NONBLOCK);
+
 					  c->otherSockets[c->numOtherSockets] = i;
 
 					  if(j->h_name != NULL)
@@ -616,6 +621,8 @@ int poll_for_match(match_a_t* c, int max_messages)
 	// 2. check for messages on sockets of peers
 
 	int b = 0;
+	int o; //< # bytes left available for reading
+#define DO_IF_CANNOT_READ(q, p) if(o < p) { q }
 
 	for(int i = 0; i < c->numOtherSockets;)
 	{
@@ -628,8 +635,7 @@ int poll_for_match(match_a_t* c, int max_messages)
 
 		  if(!(h == -1 | h == 0))
 		  {
-			  char p;
-			  char o = recv(c->otherSockets[i], &p, 1, MSG_PEEK);
+			  ioctl(c->otherSockets[i], FIONREAD, &o);
 			  if(o == 0)
 			  {
 				  // empty message, this means the other socket has hung up (I think)
@@ -656,25 +662,32 @@ int poll_for_match(match_a_t* c, int max_messages)
 				  {
 				  case 0: /* POLLIN */
 					  {
-						  if(b < max_messages)
+						  while(1)
 						  {
-							  // first sizeof(int) bytes store the size of the message.
-							  int l;
-							  /*int m =*/ read(c->otherSockets[i], &l, sizeof(int));
+							  if(b < max_messages || max_messages == -1)
+							  {
+								  // first sizeof(int) bytes store the size of the message.
+								  int l;
+								  DO_IF_CANNOT_READ(read(c->otherSockets[i], &l, o); break;, sizeof(int)); //< read last bytes as to discard them and break
+								  /*int m =*/ read(c->otherSockets[i], &l, sizeof(int));
+								  o -= sizeof(int);
 
-							  // NOTE: if (m != sizeof(int)) should not happen
-							  printf("l %i\n", l);
-							  char* n = new char[l];
-							  /*int k =*/ read(c->otherSockets[i], n, l);
-							  // NOTE: if (k != l) should not happen
-							  on_receive((tm_message_t*)n, l);
-							  delete n;
+								  // NOTE: if (m != sizeof(int)) should not happen
+								  printf("l %i\n", l);
+								  char* n = new char[l];
+								  DO_IF_CANNOT_READ(read(c->otherSockets[i], n, o); break;, l); //< read last bytes as to discard them and break
+								  /*int k =*/ read(c->otherSockets[i], n, l);
+								  o -= l;
+								  // NOTE: if (k != l) should not happen
+								  on_receive((tm_message_t*)n, l);
+								  delete n;
 
-							  ++b;
-						  }
-						  else
-						  {
-							  return 1; //< can't process any more messages this poll
+								  ++b;
+							  }
+							  else
+							  {
+								  break; //< can't process any more messages this poll
+							  }
 						  }
 					  }
 					  break;
@@ -711,7 +724,9 @@ int poll_for_match(match_a_t* c, int max_messages)
 		  ++i; //< advance to next socket
 	}
 
-	return 0;
+	return o > 0;
+
+#undef DO_IF_CANNOT_READ
 }
 
 int poll_for_scout(match_b_t* c, int max_messages)
