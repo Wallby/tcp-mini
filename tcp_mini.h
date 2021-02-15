@@ -1,6 +1,10 @@
 #ifndef TCP_MINI_H
 #define TCP_MINI_H
 
+// NOTE: "endianness" of..
+//       .. buffers is left-to-right
+//       .. "integer variables" is left-to-right decreases
+
 #ifdef __cplusplus
 #define TCP_MINI_FUNCTION extern "C"
 #else
