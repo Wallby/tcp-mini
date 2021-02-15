@@ -179,19 +179,19 @@ void* match;
 void (*on_connected_to_us)(char* ip);
 void (*on_scout_hung_up)(char* ip);
 
-extern "C" int tm_set_on_connected_to_us(void(*a)(char*))
+extern "C" void tm_set_on_connected_to_us(void(*a)(char*))
 {
 	on_connected_to_us = a;
 }
-extern "C" int tm_unset_on_connected_to_us()
+extern "C" void tm_unset_on_connected_to_us()
 {
 	on_connected_to_us = 0;
 }
-extern "C" int tm_set_on_scout_hung_up(void(*a)(char*))
+extern "C" void tm_set_on_scout_hung_up(void(*a)(char*))
 {
 	on_scout_hung_up = a;
 }
-extern "C" int tm_unset_on_scout_hung_up()
+extern "C" void tm_unset_on_scout_hung_up()
 {
 	on_scout_hung_up = NULL;
 }
@@ -349,6 +349,7 @@ extern "C" int tm_search_for_match(char* ip_pattern, tm_match_blob_t* a)
     a->ip[c + 1] = '\0';
 
 	// see if any results match the provided pattern
+    return 0;
 }
 
 // can delete match when it is match_b_t
