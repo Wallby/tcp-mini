@@ -485,6 +485,7 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
 		  for(int i = 0; i < f->numOtherSockets; ++i)
 		  {
 			  write(f->otherSockets[i], buffer, g);
+			  printf("sent message of %i bytes (including size bytes)\n", g);
 		  }
       }
       return 1;
