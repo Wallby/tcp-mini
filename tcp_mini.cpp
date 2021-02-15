@@ -60,7 +60,7 @@ int findc(char* a, char b)
 
 // NOTE: don't use directly (used as template for other functions of same name)
 #define _TM_GET_INDEX_OF_FIRST_IN_BITFIELD(a, b) \
-	b c = 0; \
+	int c = 0;\
 	while(a != 0) \
 	{ \
 		b d = a & 1; \
@@ -69,7 +69,7 @@ int findc(char* a, char b)
 			return c; \
 		} \
 		++c; \
-		a = a << 1; \
+		a = a >> 1; \
 	} \
 	return sizeof(b) * 8; //< not in bitfield
 
