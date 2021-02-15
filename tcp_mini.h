@@ -91,13 +91,7 @@ int tm_get_port(); //< will return port for "match | scout" depending on which i
 
 //**************** phase 2 - not a phase **********************
 
-//message_t messages_to_send; //< outgoing
-
 // NOTE: don't call poll asynchronously (it is not officially supported)
-//< will fill up messages and set num_messages accordingly
-//< will return 0 if no more messages left to process or 1 if there are
-//int poll(struct message_t** messages, int* num_messages, int max_messages);
-
 //< NOTE: set max_messages to -1 to remove the limit (i.e. no # messages is "too much")
 //< will call on_receive for each "polled" message
 //< will return 0 if no more messages left to process or 1 if there are
@@ -108,11 +102,6 @@ TCP_MINI_FUNCTION int tm_poll(int max_messages);
 TCP_MINI_FUNCTION void tm_set_on_receive(void(*a)(struct tm_message_t*, int));
 TCP_MINI_FUNCTION void tm_unset_on_receive();
 
-/*
- * you can either send a file and a .stamp file (e.g. for code object, framework file)
- * or a blob (bytes that can be interpretted as a message_t) and a .stamp file
- */
-//int tm_send(char* a); //< NOTE: this should become message_t* a
 // NOTE: will send to all ip's if match, or to the match if scout
 // NOTE: returns 1 if message was sent
 //       return -1 if no code was executed

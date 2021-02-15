@@ -91,20 +91,6 @@ T remove_from_bitfield(int a, T b)
 #define TM_RETRY_ONCE_IF_NOT(a,b,c) { c = a; if((c) != (b)) { c = a; } } //< b is the success value
 #define TM_RETRY_ONCE(a,b) { b = a; if(!b) { b = a; }
 
-// //*********************************************************
-
-// enum EPacketStamp
-// {
-// 	EPacketStamp_Raw,
-// 	EPacketStamp_ASCII
-// };
-
-// struct packet_t
-// {
-// 	int stamp; // one of EPacketStamp
-// 	char* whatIsInThePacket;
-// };
-
 //*********************************************************
 
 enum EMatchType
@@ -346,30 +332,6 @@ extern "C" void tm_unset_on_match_hung_up()
 {
 	on_match_hung_up = NULL;
 }
-
-
-/*
- * provides a function to connect that can be overridden for different
- * concrete protocols
- */
-class IConnector
-{
-public:
-	// attempt to establish a connection or return 0
-	virtual int Connect(tm_match_blob_t a) = 0;
-};
-
-/*
- * TCP version of IConnector
- */
-class TCPConnector : IConnector
-{
-public:
-	virtual int Connect(tm_match_blob_t a) override
-	{
-		// assure that all settings in b are valid for TCP?
-	}
-};
 
 // a == "out parameter"
 extern "C" int tm_search_for_match(char* ip_pattern, tm_match_blob_t* a)
