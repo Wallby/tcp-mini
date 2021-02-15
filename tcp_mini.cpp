@@ -546,7 +546,8 @@ int poll_for_match(match_a_t* c, int max_messages)
 	a.fd = c->socket;
 	a.events = POLLIN;
 	int e = poll(&a, 1, 0); //< NOTE: at the time of writing this, there is only one connection request accepted at a time
-	while(!(e == -1 | e == 0) && a.revents != 0) //< NOTE: poll can fail if interrupted (EINTR), not sure though if this applies if timeout value is 0
+	while(!(e == -1 || e == 0) && a.revents != 0) //< NOTE: poll can fail if interrupted (EINTR), not sure though if this applies if timeout value is 0
+
 	{
 		  int f = get_index_of_first_in_bitfield(a.revents);
 		  switch(f)
@@ -635,7 +636,8 @@ int poll_for_match(match_a_t* c, int max_messages)
 		  int h = poll(&g, 1, 0);
 		  //< NOTE: perhaps call poll once with an array of all file descriptors?
 
-		  if(!(h == -1 | h == 0))
+		  if(!(h == -1 || h == 0))
+
 		  {
 			  ioctl(c->otherSockets[i], FIONREAD, &o);
 			  if(o == 0)
@@ -708,7 +710,8 @@ int poll_for_scout(match_b_t* c, int max_messages)
 	g.events = POLLIN;
 	int h = poll(&g, 1, 0);
 
-	if(!(h == -1 | h == 0))
+	if(!(h == -1 || h == 0))
+
 	{
 	  int b = 0;
 	  int o; //< # bytes left available for reading
