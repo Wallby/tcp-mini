@@ -105,7 +105,8 @@ public:
 	String()
 	{
 	};
-	String(char* b/*a*/)
+	//String(char* b)
+	String(const char* b)
 	{
 		this->a = new char[length(b) + 1];
 		strcpy(this->a, b);
