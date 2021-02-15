@@ -37,8 +37,9 @@ int length(char* a)
 {
 	return strlen(a);
 }
-template<typename T>
-int length(T a[])
+// NOTE: T& is a reference to adress "decay issue" (where T[] becomes T*) as explained here http://www.cplusplus.com/articles/D4SGz8AR/
+template<typename T, int A>
+int length(T (&a)[A])
 {
 	return sizeof a/sizeof *a;
 }
