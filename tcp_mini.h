@@ -1,7 +1,11 @@
 #ifndef TCP_MINI_H
 #define TCP_MINI_H
 
-#define TCP_MINI_VERSION 0.1
+#define TCP_MINI_VERSION 0.2
+
+// NOTE: "endianness" of..
+//       .. buffers is left-to-right
+//       .. "integer variables" is left-to-right decreases
 
 #ifdef __cplusplus
 #define TCP_MINI_FUNCTION extern "C"
@@ -39,12 +43,12 @@ TCP_MINI_FUNCTION int tm_become_a_match(int port);
 TCP_MINI_FUNCTION int tm_send_to(struct tm_message_t* a, int d, void* b, int c, char* ip);
 
 //void(*on_connected_to_us)(char* ip)
-TCP_MINI_FUNCTION int tm_set_on_connected_to_us(void(*a)(char*));
-TCP_MINI_FUNCTION int tm_unset_on_connected_to_us();
+TCP_MINI_FUNCTION void tm_set_on_connected_to_us(void(*a)(char*));
+TCP_MINI_FUNCTION void tm_unset_on_connected_to_us();
 
 // NOTE: void(*a)(char* ip)
-TCP_MINI_FUNCTION int tm_set_on_scout_hung_up(void(*a)(char*));
-TCP_MINI_FUNCTION int tm_unset_on_scout_hung_up();
+TCP_MINI_FUNCTION void tm_set_on_scout_hung_up(void(*a)(char*));
+TCP_MINI_FUNCTION void tm_unset_on_scout_hung_up();
 #define TM_SET_ON_HUNG_UP(a) tm_set_on_scout_hung_up(a)
 #define TM_UNSET_ON_HUNG_UP() tm_unset_on_scout_hung_up()
 #endif

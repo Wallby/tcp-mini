@@ -7,13 +7,30 @@
 #include <cstring>
 #include <cstdio>
 
+#include <unistd.h>
+#include <fcntl.h>
+#if defined(_WIN32)
+#include <winsock2.h>
+int poll(WSAPOLLFD a[], ULONG b, INT c)
+{
+	return WSAPoll(a, b, c);
+}
+int ioctl(SOCKET a, __LONG32 b, u_long* c)
+{
+	return ioctlsocket(a, b, c);
+}
+#define socklen_t int
+#elif defined (__linux__)
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
-#include <unistd.h>
 #include <poll.h>
 #include <netdb.h>
-#include <fcntl.h>
+#else
+#error "unsupported platform"
+#endif
+
+#pragma GCC diagnostic ignored "-Wsign-compare"
 
 
 void* operator new[](std::size_t a)
@@ -33,12 +50,14 @@ void operator delete(void* a, std::size_t)
     free(a); //< there is no check here on purpose, please catch this issue elsewhere
 }
 
-int length(char* a)
+//int length(char* a)
+int length(const char* a)
 {
 	return strlen(a);
 }
-template<typename T>
-int length(T a[])
+// NOTE: T& is a reference to adress "decay issue" (where T[] becomes T*) as explained here http://www.cplusplus.com/articles/D4SGz8AR/
+template<typename T, int A>
+int length(T (&a)[A])
 {
 	return sizeof a/sizeof *a;
 }
@@ -59,7 +78,7 @@ int findc(char* a, char b)
 
 // NOTE: don't use directly (used as template for other functions of same name)
 #define _TM_GET_INDEX_OF_FIRST_IN_BITFIELD(a, b) \
-	b c = 0; \
+	int c = 0;\
 	while(a != 0) \
 	{ \
 		b d = a & 1; \
@@ -68,7 +87,7 @@ int findc(char* a, char b)
 			return c; \
 		} \
 		++c; \
-		a = a << 1; \
+		a = a >> 1; \
 	} \
 	return sizeof(b) * 8; //< not in bitfield
 
@@ -105,7 +124,8 @@ public:
 	String()
 	{
 	};
-	String(char* b/*a*/)
+	//String(char* b)
+	String(const char* b)
 	{
 		this->a = new char[length(b) + 1];
 		strcpy(this->a, b);
@@ -153,8 +173,13 @@ struct match_a_t
 {
 	int c = EMatchType_A;
 	int port;
+#if defined(__linux__)
 	int socket;
 	int otherSockets[TM_MAXCONNECTIONS]; //< sockets on which to listen to messages from b(s)
+#else
+	SOCKET socket;
+	SOCKET otherSockets[TM_MAXCONNECTIONS]; //< sockets on which to listen to messages from b(s)
+#endif
 	String otherIPs[TM_MAXCONNECTIONS];
 	int numOtherSockets = 0; //< NOTE: the index is not suitable for use as index elsewhere, as the index of one b might change when another b disconnects
 };
@@ -162,7 +187,11 @@ struct match_b_t
 {
 	int c = EMatchType_B;
 	int port;
+#if defined(__linux__)
 	int socket;
+#else
+	SOCKET socket;
+#endif
 };
 struct invalid_match_t
 {
@@ -178,19 +207,19 @@ void* match;
 void (*on_connected_to_us)(char* ip);
 void (*on_scout_hung_up)(char* ip);
 
-extern "C" int tm_set_on_connected_to_us(void(*a)(char*))
+extern "C" void tm_set_on_connected_to_us(void(*a)(char*))
 {
 	on_connected_to_us = a;
 }
-extern "C" int tm_unset_on_connected_to_us()
+extern "C" void tm_unset_on_connected_to_us()
 {
 	on_connected_to_us = 0;
 }
-extern "C" int tm_set_on_scout_hung_up(void(*a)(char*))
+extern "C" void tm_set_on_scout_hung_up(void(*a)(char*))
 {
 	on_scout_hung_up = a;
 }
-extern "C" int tm_unset_on_scout_hung_up()
+extern "C" void tm_unset_on_scout_hung_up()
 {
 	on_scout_hung_up = NULL;
 }
@@ -210,8 +239,13 @@ extern "C" int tm_become_a_match(int port)
 
   match_a_t* c = (match_a_t*)match; //< convention is to avoid a/b here to avoid confusion
   c->port = port;
+#if defined(__linux__)
   c->socket = socket(AF_INET, SOCK_STREAM /* TCP */ | SOCK_NONBLOCK, 0);
   if(c->socket == -1)
+#else // #elif defined(_WIN32)
+  c->socket = socket(AF_INET, SOCK_STREAM /* TCP */, 0);
+  if(c->socket == INVALID_SOCKET)
+#endif
   {
 	  // NOTE: I am not sure if this is likely to fail, though EACCES seems like it "could" happen
 	  delete c;
@@ -219,8 +253,17 @@ extern "C" int tm_become_a_match(int port)
 	  return 0;
   }
 
+#if defined(_WIN32)
+  u_long e = 1;
+  ioctlsocket(c->socket, FIONBIO, &e);
+#endif
+
   // NOTE: SO_REUSEADDR "makes TCP less reliable" according to https://www.man7.org/linux/man-pages/man7/ip.7.html
+#if defined(__linux)
   int d = 1;
+#else
+  char d = 1;
+#endif
   setsockopt(c->socket, SOL_SOCKET, SO_REUSEADDR, &d, sizeof(int));
 
   sockaddr_in a;
@@ -256,12 +299,16 @@ extern "C" int tm_stop_being_a_match()
   }
 
   match_a_t* d = (match_a_t*)c;
+#if defined(__linux__)
   int e;
   TM_RETRY_ONCE_IF_NOT(close(d->socket), 0, e);
   if(e != 0)
   {
 	  return 0;
   }
+#else
+  closesocket(d->socket);
+#endif
 
   delete d;
   match = NULL;
@@ -315,7 +362,11 @@ extern "C" int tm_send_to(tm_message_t* a, int d, void* b, int c, char* ip)
 	memcpy(&buffer[0], a, d);
 	memcpy(&buffer[d], b, c);
 
+#if defined(__linux__)
 	write(f->otherSockets[i], buffer, g);
+#else
+	send(f->otherSockets[i], buffer, g, 0);
+#endif
 
 	return 1;
 }
@@ -348,6 +399,7 @@ extern "C" int tm_search_for_match(char* ip_pattern, tm_match_blob_t* a)
     a->ip[c + 1] = '\0';
 
 	// see if any results match the provided pattern
+    return 0;
 }
 
 // can delete match when it is match_b_t
@@ -366,7 +418,12 @@ extern "C" int tm_connect(tm_match_blob_t a)
 	match_b_t* d = (match_b_t*)match;
 	d->port = a.port;
 	d->socket = socket(AF_INET, SOCK_STREAM /* TCP */, 0);
+
+#if defined(__linux__)
 	if(d->socket == -1)
+#else
+	if(d->socket == INVALID_SOCKET)
+#endif
 	{
 		// NOTE: I am not sure if this is likely to fail, though EACCES seems like it "could" happen
 		delete d;
@@ -375,8 +432,12 @@ extern "C" int tm_connect(tm_match_blob_t a)
 	}
 
 	// NOTE: SO_REUSEADDR "makes TCP less reliable" according to https://www.man7.org/linux/man-pages/man7/ip.7.html
+#if defined(__linux__)
 	int f = 1;
-	setsockopt(d->socket, SOL_SOCKET, SO_REUSEADDR, &f, sizeof(int));
+#else
+	char f = 1;
+#endif
+	setsockopt(d->socket, SOL_SOCKET, SO_REUSEADDR, &f, sizeof f);
 
 	// if a is set via a.ip, hostname should catch that case
 	hostent* e = gethostbyname(a.hostname);
@@ -400,7 +461,12 @@ extern "C" int tm_connect(tm_match_blob_t a)
 	}
 
 	// once connected, enable O_NONBLOCK so that reading wont wait for data
+#if defined(__linux__)
 	fcntl(d->socket, F_SETFL, O_NONBLOCK);
+#else
+	u_long g = 1;
+	ioctlsocket(d->socket, FIONBIO, &g);
+#endif
 
 	return 1;
 }
@@ -419,12 +485,16 @@ extern "C" int tm_disconnect()
   }
 
   match_b_t* d = (match_b_t*) c;
+#if defined(__linux__)
   int e;
   TM_RETRY_ONCE_IF_NOT(close(d->socket), 0, e);
   if(e != 0)
   {
 	return 0;
   }
+#else
+  closesocket(d->socket);
+#endif
 
   delete d;
   match = NULL;
@@ -484,14 +554,22 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
     	  match_a_t* f = (match_a_t*)e;
 		  for(int i = 0; i < f->numOtherSockets; ++i)
 		  {
+#if defined(__linux__)
 			  write(f->otherSockets[i], buffer, g);
+#else
+			  send(f->otherSockets[i], buffer, g, 0);
+#endif
 		  }
       }
       return 1;
   case EMatchType_B:
       {
 	    match_b_t* f = (match_b_t*)e;
+#if defined(__linux__)
 	    write(f->socket, buffer, g);
+#else
+	    send(f->socket, buffer, g, 0);
+#endif
 	    printf("sent message of %i bytes (including size bytes)\n", g);
       }
       return 1;
@@ -503,24 +581,75 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
 // NOTE: *c -> # bytes left available for reading
 // NOTE: b -> socket to process messages for
 // NOTE: *a -> # messages processed so far
+#if defined(__linux__)
 void process_messages(int* c, int b, int* a, int max_messages)
+#else
+void process_messages(u_long* c, int b, int* a, int max_messages)
+#endif
 {
+#if defined(__linux)
 #define DO_IF_CANNOT_READ(q, p) if(*c < p) { q }
+#else
+// NOTE: s == # bytes that must be readable
+#define DO_IF_CANNOT_READ(s, u) \
+	{ \
+		u_long t; \
+		ioctlsocket(b, FIONREAD, &t); \
+		if(t < s) \
+		{ \
+			u \
+		} \
+	}
+#define WAIT_UNTIL_CAN_READ(s) \
+	while(1) \
+	{ \
+		u_long t; \
+		ioctlsocket(b, FIONREAD, &t); \
+		if(t >= s) \
+		{ \
+			break; \
+		} \
+	}
+#endif
+
+    char* o = new char[*c]; //< for storing the remainder of the message when not enough data is available for reading
+
 	while(1)
 	{
 	  if(*a < max_messages || max_messages == -1)
 	  {
 		  // first sizeof(int) bytes store the size of the message.
 		  int l;
-		  DO_IF_CANNOT_READ(read(b, &l, *c); break;, sizeof(int)); //< read last bytes as to discard them and break
+#if defined(__linux__)
+		  DO_IF_CANNOT_READ(read(b, o, *c); break;, sizeof(int)); //< read last bytes as to discard them and break
 		  /*int m =*/ read(b, &l, sizeof(int));
+#else
+		  // NOTE: currently, this is exploitable by sending an incomplete message (I think)
+		  WAIT_UNTIL_CAN_READ(sizeof(int));
+
+		  WSABUF p;
+		  p.buf = (char*)&l;
+		  p.len = sizeof(int);
+		  DWORD q = MSG_PARTIAL;
+		  DWORD r;
+		  WSARecv(b, &p, 1, &r, &q, NULL, NULL);
+#endif
 		  *c -= sizeof(int);
 
 		  // NOTE: if (m != sizeof(int)) should not happen
 		  printf("l %i\n", l);
 		  char* n = new char[l];
-		  DO_IF_CANNOT_READ(read(b, n, *c); break;, l); //< read last bytes as to discard them and break
+#if defined(__linux__)
+		  DO_IF_CANNOT_READ(read(b, o, *c); break;, l); //< read last bytes as to discard them and break
 		  /*int k =*/ read(b, n, l);
+#else
+		  WAIT_UNTIL_CAN_READ(l);
+
+		  p.buf = n;
+		  p.len = l;
+		  //q = 0; //< set to MSG_PARTIAL if another part of the message needs to be processed after
+		  WSARecv(b, &p, 1, &r, &q, NULL, NULL);
+#endif
 		  *c -= l;
 
 		  // NOTE: if (k != l) should not happen
@@ -528,102 +657,174 @@ void process_messages(int* c, int b, int* a, int max_messages)
 		  delete n;
 
 		  ++*a;
+
+#if defined(_WIN32)
+		  DO_IF_CANNOT_READ(1, break;); //< break if there is no more readable data
+#endif
 	  }
 	  else
 	  {
 		  break; //< can't process any more messages this poll
 	  }
-	}
+    }
+    delete o;
 #undef DO_IF_CANNOT_READ
+}
+
+enum EPollEvent
+{
+#if defined(__linux__)
+	EPollEvent_POLLIN = 0,
+	EPollEvent_POLLRDNORM = 6,
+	EPollEvent_POLLRDBAND = 7,
+	EPollEvent_POLLPRI = 1,
+	EPollEvent_POLLOUT = 2,
+	EPollEvent_POLLWRNORM = 8,
+	EPollEvent_POLLERR = 3,
+	EPollEvent_POLLHUP = 4,
+	EPollEvent_POLLNVAL = 5,
+	EPollEvent_POLLWRBAND = 9,
+	EPollEvent_POLLMSG = 10,
+	EPollEvent_POLLREMOVE = 12,
+	EPollEvent_POLLRDHUP = 13
+#else
+	EPollEvent_POLLRDNORM = 8,
+	EPollEvent_POLLRDBAND = 9,
+	EPollEvent_POLLIN = EPollEvent_POLLRDNORM | EPollEvent_POLLRDBAND,
+	EPollEvent_POLLPRI = 10,
+	EPollEvent_POLLWRNORM = 4,
+	EPollEvent_POLLOUT = EPollEvent_POLLWRNORM,
+	EPollEvent_POLLERR = 0,
+	EPollEvent_POLLHUP = 1,
+	EPollEvent_POLLNVAL = 2,
+	EPollEvent_POLLWRBAND = 5
+#endif
+};
+
+//void process_next_event(short int& a, struct {int a; void(*b)(int)}* b, int c)
+struct process_next_event_arg_t
+{
+	int a; //< one of EPollEvent
+	// NOTE: a is one of EPollEvent
+	//       b is a "pointer to data" (for arguments)
+	//void(*b)(int a, void* b);
+	void(*b)(int, void*);
+	void* c; //< gets passed to b (i.e. b(.., c))
+};
+// NOTE: a is &<pollfd>.revents
+//       b is array of process_next_event_arg_t structures
+//       c is length(b)
+void process_next_event(short int* a, process_next_event_arg_t* b, int c)
+{
+	int d = get_index_of_first_in_bitfield(*a);
+
+	for(int e = 0; e < c; ++e)
+	{
+#if defined(_WIN32)
+		if(b[e].a == EPollEvent_POLLIN && (d == EPollEvent_POLLRDNORM || d == EPollEvent_POLLRDBAND))
+		{
+			b[e].b(EPollEvent_POLLIN, b[e].c);
+		}
+#endif
+		if(b[e].a == d)
+		{
+			b[e].b(b[e].a, b[e].c);
+		}
+		//printf("b[e].a %i\n", b[e].a);
+		//printf("d %i\n", d);
+	}
+
+	*a = remove_from_bitfield(d, *a);
 }
 
 int poll_for_match(match_a_t* c, int max_messages)
 {
 	// 1. check the listening socket (e.g. for pending connections)
 
+	process_next_event_arg_t f;
+	f.a = EPollEvent_POLLIN;
+	using g_t = struct { match_a_t* a; };
+	g_t g;
+	g.a = c;
+	f.c = &g;
+	f.b = [](int a, void* b)
+	{
+		g_t* g = (g_t*)b;
+
+		sockaddr_in c;
+		socklen_t d = sizeof c;
+#if defined(__linux__)
+		int e = accept(g->a->socket, (sockaddr*)&c, &d);
+		// NOTE: documentation says that d might be greater than sizeof c now (should this be checked for?)
+		if(e == -1)
+#else
+		SOCKET e = accept(g->a->socket, (sockaddr*)&c, &d);
+		if(e == INVALID_SOCKET)
+#endif
+		{
+			// TODO: make sure that the errors that can be thrown here are managed..?
+			return;
+		}
+//#if defined(__linux__)
+		if(g->a->numOtherSockets == length(g->a->otherSockets))
+//#else
+//		if(c->numOtherSockets == (sizeof c->otherSockets / sizeof *c->otherSockets))
+//#endif
+		{
+			// refuse ("lobby is full")
+		}
+		else
+		{
+#if defined(__linux__)
+			hostent* f = gethostbyaddr((void*)&c.sin_addr, sizeof c.sin_addr, AF_INET);
+#else
+			hostent* f = gethostbyaddr((char*)&c.sin_addr, sizeof c.sin_addr, AF_INET);
+#endif
+			if(f == NULL)
+			{
+				// kick the player from the lobby (can't obtain a readable ip)
+			}
+
+#if defined(__linux__)
+			fcntl(e, F_SETFL, O_NONBLOCK);
+#else
+			u_long h = 1;
+			ioctlsocket(e, FIONBIO, &h);
+#endif
+
+			g->a->otherSockets[g->a->numOtherSockets] = e;
+			if(f->h_name != NULL)
+			{
+				g->a->otherIPs[g->a->numOtherSockets] = f->h_name;
+			}
+			else
+			{
+				// TODO: copy addr as readable string
+				g->a->otherIPs[g->a->numOtherSockets] = "ok";
+			}
+			++g->a->numOtherSockets;
+
+			on_connected_to_us(g->a->otherIPs[g->a->numOtherSockets - 1]);
+		}
+	};
+
 	pollfd a;
 	a.fd = c->socket;
 	a.events = POLLIN;
 	int e = poll(&a, 1, 0); //< NOTE: at the time of writing this, there is only one connection request accepted at a time
-	while(!(e == -1 | e == 0) && a.revents != 0) //< NOTE: poll can fail if interrupted (EINTR), not sure though if this applies if timeout value is 0
+	while(!(e == -1 || e == 0) && a.revents != 0) //< NOTE: poll can fail if interrupted (EINTR), not sure though if this applies if timeout value is 0
 	{
-		  int f = get_index_of_first_in_bitfield(a.revents);
-		  switch(f)
-		  {
-		  case 0: /* POLLIN */
-			  {
-				  sockaddr_in g;
-				  socklen_t h = sizeof g;
-				  int i = accept(c->socket, (sockaddr*)&g, &h);
-				  // NOTE: documentation says that h might be greater than sizeof g now (should this be checked for?)
-				  if(i == -1)
-				  {
-					  // TODO: make sure that the errors that can be thrown here are managed..?
-					  break;
-				  }
-				  if(c->numOtherSockets == length(c->otherSockets))
-				  {
-					  // refuse ("lobby is full")
-				  }
-				  else
-				  {
-					  hostent* j = gethostbyaddr((void*)&g.sin_addr, sizeof g.sin_addr, AF_INET);
-					  if(j == NULL)
-					  {
-					    // kick the player from the lobby (can't obtain a readable ip)
-					  }
-
-					  fcntl(i, F_SETFL, O_NONBLOCK);
-
-					  c->otherSockets[c->numOtherSockets] = i;
-
-					  if(j->h_name != NULL)
-					  {
-						  c->otherIPs[c->numOtherSockets] = j->h_name;
-					  }
-					  else
-					  {
-						  // TODO: copy addr as readable string
-						  c->otherIPs[c->numOtherSockets] = "ok";
-					  }
-					  ++c->numOtherSockets;
-
-					  on_connected_to_us(c->otherIPs[c->numOtherSockets - 1]);
-				  }
-			  }
-			  break;
-		  case 1: /* POLLPRI */
-			  break;
-		  case 2: /* POLLOUT */
-			  break;
-		  case 3: /* POLLERR */
-			  break;
-		  case 4: /* POLLHUP */
-			  break;
-		  case 5: /* POLLNVAL */
-			  break;
-		  case 6: /* POLLRDNORM */
-			  break;
-		  case 7: /* POLLRDBAND */
-			  break;
-		  case 8: /* POLLWRNORM */
-			  break;
-		  case 9: /* POLLWRBAND */
-			  break;
-		  case 10: /* POLLMSG */
-			  break;
-		  case 12: /* POLLREMOVE */
-			  break;
-		  case 13: /* POLLRDHUP */
-			  break;
-		  }
-		  a.revents = remove_from_bitfield(f, a.revents);
+		process_next_event(&a.revents, &f, 1);
 	}
 
 	// 2. check for messages on sockets of peers
 
 	int b = 0;
-	int o; //< # bytes left available for reading
+#if defined(__linux__) //< # bytes left available for reading
+	int o;
+#else
+	u_long o;
+#endif
 
 	for(int i = 0; i < c->numOtherSockets;)
 	{
@@ -634,7 +835,8 @@ int poll_for_match(match_a_t* c, int max_messages)
 		  int h = poll(&g, 1, 0);
 		  //< NOTE: perhaps call poll once with an array of all file descriptors?
 
-		  if(!(h == -1 | h == 0))
+		  if(!(h == -1 || h == 0))
+
 		  {
 			  ioctl(c->otherSockets[i], FIONREAD, &o);
 			  if(o == 0)
@@ -655,41 +857,31 @@ int poll_for_match(match_a_t* c, int max_messages)
 				  continue; //< onto the next socket
 			  }
 
+			  f.a = EPollEvent_POLLIN;
+#if defined(__linux__)
+			  using h_t = struct { int* a; match_a_t* b; int* c; int d; int e; };
+#else
+			  using h_t = struct { u_long* a; match_a_t* b; int* c; int d; int e; };
+#endif
+			  h_t h;
+			  h.a = &o;
+			  h.b = c;
+			  h.c = &b;
+			  h.d = max_messages;
+			  h.e = i;
+			  f.c = &h;
+			  f.b = [](int a, void* b)
+			  {
+				h_t* c = (h_t*)b;
+				process_messages(c->a, c->b->otherSockets[c->e], c->c, c->d);
+			  };
+
 			  while(g.revents != 0)
 			  {
 				  printf("g.revents before %hi\n", g.revents);
-				  int f = get_index_of_first_in_bitfield(g.revents);
-				  switch(f)
-				  {
-				  case 0: /* POLLIN */
-					  process_messages(&o, c->otherSockets[i], &b, max_messages);
-					  break;
-				  case 1: /* POLLPRI */
-					  break;
-				  case 2: /* POLLOUT */
-					  break;
-				  case 3: /* POLLERR */
-					  break;
-				  case 4: /* POLLHUP */
-					  break;
-				  case 5: /* POLLNVAL */
-					  break;
-				  case 6: /* POLLRDNORM */
-					  break;
-				  case 7: /* POLLRDBAND */
-					  break;
-				  case 8: /* POLLWRNORM */
-					  break;
-				  case 9: /* POLLWRBAND */
-					  break;
-				  case 10: /* POLLMSG */
-					  break;
-				  case 12: /* POLLREMOVE */
-					  break;
-				  case 13: /* POLLRDHUP */
-					  break;
-				  }
-				  g.revents = remove_from_bitfield(f, g.revents);
+
+				  process_next_event(&g.revents, &f, 1);
+
 				  printf("g.revents after %i\n", g.revents);
 			  }
 		  }
@@ -702,18 +894,23 @@ int poll_for_match(match_a_t* c, int max_messages)
 
 int poll_for_scout(match_b_t* c, int max_messages)
 {
-	pollfd g;
-	g.fd = c->socket;
-	g.events = POLLIN;
-	int h = poll(&g, 1, 0);
+	pollfd a;
+	a.fd = c->socket;
+	a.events = POLLIN;
+	int d = poll(&a, 1, 0);
 
-	if(!(h == -1 | h == 0))
+	if(!(d == -1 || d == 0))
 	{
 	  int b = 0;
-	  int o; //< # bytes left available for reading
+#if defined(__linux__) //< # bytes left available for reading
+	  int e;
+#else
+	  u_long e;
+#endif
 
-	  ioctl(c->socket, FIONREAD, &o);
-	  if(o == 0)
+	  ioctl(c->socket, FIONREAD, &e);
+
+	  if(e == 0)
 	  {
 		  // empty message, this means the other socket has hung up (I think)
 		  tm_disconnect();
@@ -726,45 +923,36 @@ int poll_for_scout(match_b_t* c, int max_messages)
 		  return 0;
 	  }
 
-	  while(g.revents != 0)
+	  process_next_event_arg_t f;
+	  f.a = EPollEvent_POLLIN;
+	  // IDEA: replace void* to struct with ... (va_arg)
+#if defined(__linux__)
+	  using g_t = struct { int* a; match_b_t* b; int* c; int d; };
+#else
+	  using g_t = struct { u_long* a; match_b_t* b; int* c; int d; };
+#endif
+	  g_t g;
+	  g.a = &e;
+	  g.b = c;
+	  g.c = &b;
+	  g.d = max_messages;
+	  f.c = &g;
+	  f.b = [](int a, void* b)
 	  {
-		  printf("g.revents before %hi\n", g.revents);
-		  int f = get_index_of_first_in_bitfield(g.revents);
-		  switch(f)
-		  {
-		  case 0: /* POLLIN */
-			  process_messages(&o, c->socket, &b, max_messages);
-			  break;
-		  case 1: /* POLLPRI */
-			  break;
-		  case 2: /* POLLOUT */
-			  break;
-		  case 3: /* POLLERR */
-			  break;
-		  case 4: /* POLLHUP */
-			  break;
-		  case 5: /* POLLNVAL */
-			  break;
-		  case 6: /* POLLRDNORM */
-			  break;
-		  case 7: /* POLLRDBAND */
-			  break;
-		  case 8: /* POLLWRNORM */
-			  break;
-		  case 9: /* POLLWRBAND */
-			  break;
-		  case 10: /* POLLMSG */
-			  break;
-		  case 12: /* POLLREMOVE */
-			  break;
-		  case 13: /* POLLRDHUP */
-			  break;
-		  }
-		  g.revents = remove_from_bitfield(f, g.revents);
-		  printf("g.revents after %i\n", g.revents);
+		  g_t* c = (g_t*)b;
+		  process_messages(c->a, c->b->socket, c->c, c->d);
+	  };
+
+	  while(a.revents != 0)
+	  {
+		  printf("a.revents before %hi\n", a.revents);
+
+		  process_next_event(&a.revents, &f, 1);
+
+		  printf("a.revents after %i\n", a.revents);
 	  }
 
-	  return o > 0;
+	  return e > 0;
 	}
 
 	return 0;
