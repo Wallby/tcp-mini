@@ -524,15 +524,26 @@ extern "C" int tm_disconnect()
 
 namespace
 {
-	void(*on_receive)(tm_message_t* /*message*/, int /*a*/);
+	void(*on_receive_from_scout)(tm_message_t* /*message*/, int /*a*/, char* /*ip*/);
+	void(*on_receive_from_match)(tm_message_t* /*message*/, int /*a*/);
 }
-extern "C" void tm_set_on_receive(void(*a)(tm_message_t*, int))
+
+extern "C" void tm_set_on_receive_from_scout(void(*a)(tm_message_t*, int, char*))
 {
-	on_receive = a;
+	on_receive_from_scout = a;
+}
+extern "C" void tm_unset_on_receive_from_scout()
+{
+	on_receive_from_scout = NULL;
+}
+
+extern "C" void tm_set_on_receive_from_match(void(*a)(tm_message_t*, int))
+{
+	on_receive_from_match = a;
 }
 extern "C" void tm_unset_on_receive()
 {
-	on_receive = NULL;
+	on_receive_from_match = NULL;
 }
 
 extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
@@ -598,12 +609,12 @@ extern "C" int tm_send(tm_message_t* a, int d, void* b, int c)
 // NOTE: *c -> # bytes left available for reading
 // NOTE: b -> socket to process messages for
 // NOTE: *a -> # messages processed so far
-#if defined(__linux__)
 namespace
 {
+#if defined(__linux__)
 	void process_messages(int* c, int b, int* a, int max_messages)
 #else
-	void process_messages(u_long* c, int b, int* a, int max_messages)
+	void process_messages(u_long* c, SOCKET b, int* a, int max_messages)
 #endif
 	{
 #if defined(__linux)
@@ -672,7 +683,27 @@ namespace
 			  *c -= l;
 
 			  // NOTE: if (k != l) should not happen
-			  on_receive((tm_message_t*)n, l);
+
+			  match_t* d = (match_t*)match;
+			  switch(d->c)
+			  {
+			  case EMatchType_A:
+			  {
+				  match_a_t* e = (match_a_t*)d;
+				  for(int i = 0; i < e->numOtherSockets; ++i)
+				  {
+					  if(e->otherSockets[i] == b)
+					  {
+						  on_receive_from_scout((tm_message_t*)n, l, e->otherIPs[i]);
+					  }
+				  }
+				  break;
+			  }
+			  case EMatchType_B:
+				  on_receive_from_match((tm_message_t*)n, l);
+				  break;
+			  }
+
 			  delete n;
 
 			  ++*a;

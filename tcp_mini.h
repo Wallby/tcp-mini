@@ -95,16 +95,31 @@ int tm_get_port(); //< will return port for "match | scout" depending on which i
 
 //**************** phase 2 - not a phase **********************
 
+#if defined TCP_MINI_MATCH
+//< NOTE: a is the exact number of bytes that the message holds.
+//void(*on_receive_from_scout)(tm_message_t* message, int a, char* ip);
+TCP_MINI_FUNCTION void tm_set_on_receive_from_scout(void(*a)(struct tm_message_t*, int, char*));
+TCP_MINI_FUNCTION void tm_unset_on_receive_from_scout();
+#define TM_SET_ON_RECEIVE tm_set_on_receive_from_scout
+#define TM_UNSET_ON_RECEIVE tm_unset_on_receive_from_scout
+#endif
+
+#if defined TCP_MINI_SCOUT
+//< NOTE: a is the exact number of bytes that the message holds.
+//void(*on_receive_from_match)(tm_message_t* message, int a);
+TCP_MINI_FUNCTION void tm_set_on_receive_from_match(void(*a)(struct tm_message_t*, int));
+TCP_MINI_FUNCTION void tm_unset_on_receive_from_match();
+#define TM_SET_ON_RECEIVE tm_set_on_receive_from_match
+#define TM_UNSET_ON_RECEIVE tm_unset_on_receive_from_match
+#endif
+
+#if defined TCP_MINI_MATCH | defined TCP_MINI_SCOUT
 // NOTE: don't call poll asynchronously (it is not officially supported)
 //< NOTE: set max_messages to -1 to remove the limit (i.e. no # messages is "too much")
 //< will call on_receive for each "polled" message
 //< will return 0 if no more messages left to process or 1 if there are
 //< will return -1 if no code was executed
 TCP_MINI_FUNCTION int tm_poll(int max_messages);
-//< NOTE: a is the exact number of bytes that the message holds.
-//void(*on_receive)(message_t* message, int a);
-TCP_MINI_FUNCTION void tm_set_on_receive(void(*a)(struct tm_message_t*, int));
-TCP_MINI_FUNCTION void tm_unset_on_receive();
 
 // NOTE: will send to all ip's if match, or to the match if scout
 // NOTE: returns 1 if message was sent
@@ -112,5 +127,6 @@ TCP_MINI_FUNCTION void tm_unset_on_receive();
 #define TM_SEND_BLOCK(a, b) tm_send(a, sizeof *a, b, sizeof b) //< alias for blocks (e.g. struct or [])
 #define TM_SEND(a,b,c) tm_send(a, sizeof *a, b, c)
 TCP_MINI_FUNCTION int tm_send(struct tm_message_t* a, int d, void* b, int c);
+#endif
 
 #endif
