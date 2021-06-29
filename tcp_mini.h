@@ -1,7 +1,7 @@
 #ifndef TCP_MINI_H
 #define TCP_MINI_H
 
-#define TCP_MINI_VERSION 0.2.1
+#define TCP_MINI_VERSION 0.2.2
 
 // NOTE: "endianness" of..
 //       .. buffers is left-to-right
@@ -12,6 +12,7 @@
 #else
 #define TCP_MINI_FUNCTION
 #endif
+
 
 enum EMessageType //< NOTE: should this be ETMMessageType?
 {
@@ -40,13 +41,13 @@ TCP_MINI_FUNCTION int tm_become_a_match(int port);
 //       returns -1 if no code was executed
 #define TM_SEND_BLOCK_TO(a, b) tm_send_to(a, sizeof *a, b, sizeof b)
 #define TM_SEND_TO(a, b, c) tm_send_to(a, sizeof *a, b, c)
-TCP_MINI_FUNCTION int tm_send_to(struct tm_message_t* a, int d, void* b, int c, char* ip);
+TCP_MINI_FUNCTION int tm_send_to(struct tm_message_t* a, int d, void* b, int c, char* ipAddress);
 
-//void(*on_connected_to_us)(char* ip)
+//void(*on_connected_to_us)(char* ipAddress)
 TCP_MINI_FUNCTION void tm_set_on_connected_to_us(void(*a)(char*));
 TCP_MINI_FUNCTION void tm_unset_on_connected_to_us();
 
-// NOTE: void(*a)(char* ip)
+// NOTE: void(*a)(char* ipAddress)
 TCP_MINI_FUNCTION void tm_set_on_scout_hung_up(void(*a)(char*));
 TCP_MINI_FUNCTION void tm_unset_on_scout_hung_up();
 #define TM_SET_ON_HUNG_UP(a) tm_set_on_scout_hung_up(a)
@@ -63,8 +64,8 @@ struct tm_match_blob_t
 	//       indicates an array of characters. Not all characters have to be used
 	//       up. My source is https://web.archive.org/web/20190518124533/https://devblogs.microsoft.com/oldnewthing/?p=7873
     char hostname[254];
-    // NOTE: ip is in format "x(xx).x(xx).x(xx).x(xx)", and has a null character @ [7:15]
-    char ip[16]; //< + [254-16] bytes that are "unused"
+    // NOTE: ipAddress is in format "x(xx).x(xx).x(xx).x(xx)", and has a null character @ [7:15]
+    char ipAddress[16]; //< + [254-16] bytes that are "unused"
   };
   int port;
 };
@@ -87,7 +88,7 @@ TCP_MINI_FUNCTION void tm_unset_on_match_hung_up();
 #define TM_SET_ON_HUNG_UP(a) tm_set_on_match_hung_up(a)
 #define TM_UNSET_ON_HUNG_UP() tm_unset_on_match_hung_up()
 
-char* tm_get_ip();
+char* tm_get_ipaddress();
 //int get_port();
 #endif
 
@@ -99,7 +100,7 @@ int tm_get_port(); //< will return port for "match | scout" depending on which i
 
 #if defined TCP_MINI_MATCH
 //< NOTE: a is the exact number of bytes that the message holds.
-//void(*on_receive_from_scout)(tm_message_t* message, int a, char* ip);
+//void(*on_receive_from_scout)(tm_message_t* message, int a, char* ipAddress);
 TCP_MINI_FUNCTION void tm_set_on_receive_from_scout(void(*a)(struct tm_message_t*, int, char*));
 TCP_MINI_FUNCTION void tm_unset_on_receive_from_scout();
 #define TM_SET_ON_RECEIVE tm_set_on_receive_from_scout
@@ -123,7 +124,7 @@ TCP_MINI_FUNCTION void tm_unset_on_receive_from_match();
 //< will return -1 if no code was executed
 TCP_MINI_FUNCTION int tm_poll(int max_messages);
 
-// NOTE: will send to all ip's if match, or to the match if scout
+// NOTE: will send to all scouts if match, or to the match if scout
 // NOTE: returns 1 if message was sent
 //       return -1 if no code was executed
 #define TM_SEND_BLOCK(a, b) tm_send(a, sizeof *a, b, sizeof b) //< alias for blocks (e.g. struct or [])

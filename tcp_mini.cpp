@@ -187,7 +187,7 @@ namespace
 		SOCKET socket;
 		SOCKET otherSockets[TM_MAXCONNECTIONS]; //< sockets on which to listen to messages from b(s)
 	#endif
-		String otherIPs[TM_MAXCONNECTIONS];
+		String otherIPAddresses[TM_MAXCONNECTIONS];
 		int numOtherSockets = 0; //< NOTE: the index is not suitable for use as index elsewhere, as the index of one b might change when another b disconnects
 	};
 	struct match_b_t
@@ -214,8 +214,8 @@ namespace
 //#ifdef TCP_MINI_MATCH
 namespace
 {
-	void (*on_connected_to_us)(char* ip);
-	void (*on_scout_hung_up)(char* ip);
+	void (*on_connected_to_us)(char* ipAddress);
+	void (*on_scout_hung_up)(char* ipAddress);
 }
 
 extern "C" void tm_set_on_connected_to_us(void(*a)(char*))
@@ -327,7 +327,7 @@ extern "C" int tm_stop_being_a_match()
   return 1;
 }
 
-extern "C" int tm_send_to(tm_message_t* a, int d, void* b, int c, char* ip)
+extern "C" int tm_send_to(tm_message_t* a, int d, void* b, int c, char* ipAddress)
 {
 	if(match == NULL)
 	{
@@ -345,7 +345,7 @@ extern "C" int tm_send_to(tm_message_t* a, int d, void* b, int c, char* ip)
 	int i;
 	for(i = 0; i < f->numOtherSockets;)
 	{
-	  if(strcmp(f->otherIPs[i], ip) == 0)
+	  if(strcmp(f->otherIPAddresses[i], ipAddress) == 0)
 	  {
 		break;
 	  }
@@ -354,7 +354,7 @@ extern "C" int tm_send_to(tm_message_t* a, int d, void* b, int c, char* ip)
 	}
 	if(i == f->numOtherSockets)
 	{
-	  return -1; //< ip is not "one of connected"
+	  return -1; //< ipAddress is not "one of connected"
 	}
 
 	if(d == 0)
@@ -409,8 +409,8 @@ extern "C" int tm_search_for_match(char* ip_pattern, tm_match_blob_t* a)
     }
 
     int c = b - 1;
-    strncpy(a->ip, ip_pattern, c + 1);
-    a->ip[c + 1] = '\0';
+    strncpy(a->ipAddress, ip_pattern, c + 1);
+    a->ipAddress[c + 1] = '\0';
 
 	// see if any results match the provided pattern
     return 0;
@@ -453,7 +453,7 @@ extern "C" int tm_connect(tm_match_blob_t a)
 #endif
 	setsockopt(d->socket, SOL_SOCKET, SO_REUSEADDR, &f, sizeof f);
 
-	// if a is set via a.ip, hostname should catch that case
+	// if a is set via a.ipAddress, hostname should catch that case
 	hostent* e = gethostbyname(a.hostname);
 	if(e == NULL)
 	{
@@ -524,7 +524,7 @@ extern "C" int tm_disconnect()
 
 namespace
 {
-	void(*on_receive_from_scout)(tm_message_t* /*message*/, int /*a*/, char* /*ip*/);
+	void(*on_receive_from_scout)(tm_message_t* /*message*/, int /*a*/, char* /*ipAddress*/);
 	void(*on_receive_from_match)(tm_message_t* /*message*/, int /*a*/);
 }
 
@@ -541,7 +541,7 @@ extern "C" void tm_set_on_receive_from_match(void(*a)(tm_message_t*, int))
 {
 	on_receive_from_match = a;
 }
-extern "C" void tm_unset_on_receive()
+extern "C" void tm_unset_on_receive_from_match()
 {
 	on_receive_from_match = NULL;
 }
@@ -694,7 +694,7 @@ namespace
 				  {
 					  if(e->otherSockets[i] == b)
 					  {
-						  on_receive_from_scout((tm_message_t*)n, l, e->otherIPs[i]);
+						  on_receive_from_scout((tm_message_t*)n, l, e->otherIPAddresses[i]);
 					  }
 				  }
 				  break;
@@ -832,7 +832,7 @@ namespace
 #endif
 				if(f == NULL)
 				{
-					// kick the player from the lobby (can't obtain a readable ip)
+					// kick the player from the lobby (can't obtain a readable ip address)
 				}
 
 #if defined(__linux__)
@@ -845,16 +845,16 @@ namespace
 				g->a->otherSockets[g->a->numOtherSockets] = e;
 				if(f->h_name != NULL)
 				{
-					g->a->otherIPs[g->a->numOtherSockets] = f->h_name;
+					g->a->otherIPAddresses[g->a->numOtherSockets] = f->h_name;
 				}
 				else
 				{
 					// TODO: copy addr as readable string
-					g->a->otherIPs[g->a->numOtherSockets] = "ok";
+					g->a->otherIPAddresses[g->a->numOtherSockets] = "ok";
 				}
 				++g->a->numOtherSockets;
 
-				on_connected_to_us(g->a->otherIPs[g->a->numOtherSockets - 1]);
+				on_connected_to_us(g->a->otherIPAddresses[g->a->numOtherSockets - 1]);
 			}
 		};
 
@@ -899,10 +899,10 @@ namespace
 
 					  if(on_scout_hung_up != NULL)
 					  {
-						  on_scout_hung_up(c->otherIPs[i]);
+						  on_scout_hung_up(c->otherIPAddresses[i]);
 					  }
 
-					  memcpy(&c->otherIPs[i], &c->otherIPs[i+1], c->numOtherSockets - i);
+					  memcpy(&c->otherIPAddresses[i], &c->otherIPAddresses[i+1], c->numOtherSockets - i);
 
 					  continue; //< onto the next socket
 				  }
