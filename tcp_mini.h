@@ -1,7 +1,12 @@
 #ifndef TCP_MINI_H
 #define TCP_MINI_H
 
-#define TCP_MINI_VERSION 0.2.2
+#define TCP_MINI_VERSION 1.0.0
+
+// NOTE: match -> "active host" reachable on a specific port
+//       scout -> can attempt to connect to a match
+//       match won't be "disturbed" by the disconnecting of a scout
+//       scout will no longer be scout if match disconnects
 
 // NOTE: "endianness" of..
 //       .. buffers is left-to-right
@@ -14,9 +19,9 @@
 #endif
 
 
-enum EMessageType //< NOTE: should this be ETMMessageType?
+enum ETMMessageType
 {
-  EMessageType_None //< for empty messages
+  ETMMessageType_None //< for empty messages
 };
 
 // to use this file, create an enum for each supported concrete message
@@ -27,34 +32,41 @@ struct tm_message_t
 
 #define TCP_MINI_MAX_MESSAGE_SIZE sizeof(int) * 48 //< 48 ints in a messages should be enough? exceeding this will NOT send the message
 
-//**************** phase 1 - matchmaking **********************
+// NOTE: comment TM_MAXSCOUTS/TM_MAXMATCHES,TM_MAXCONNECTIONS out for "unlimited" scouts/matches/connections
+//#define TM_MAXSCOUTS 1
+//#define TM_MAXMATCHES 1
+// NOTE: i.e. how many scouts may connect to a match
+//#define TM_MAXCONNECTIONS 4
 
-#ifdef TCP_MINI_MATCH
-#define TM_MAXCONNECTIONS 4
-TCP_MINI_FUNCTION int tm_stop_being_a_match();
-// NOTE: returns 0 if failed to become a match, 1 if sucessfully become match
-//       returns -1 if no code was executed
+//********************* phase 1 - establishing connection *********************
+
+#if (!defined TCP_MINI_SCOUT_ONLY)
+// NOTE: returns 0 if failed to become a match, 1 if successfully became match
+//       returns -1 if no code was executed (i.e. there was already a match..
+//       .. at port OR becoming a match would cause # matches to exceed..
+//       .. TM_MAXMATCHES)
 TCP_MINI_FUNCTION int tm_become_a_match(int port);
+// NOTE: returns 1 if succeeded
+//       returns -1 if no code was executed (i.e. there was no match at port)
+TCP_MINI_FUNCTION int tm_stop_being_a_match(int port);
 
-//int get_port();
-// NOTE: returns 1 is message was sent
-//       returns -1 if no code was executed
-#define TM_SEND_BLOCK_TO(a, b) tm_send_to(a, sizeof *a, b, sizeof b)
-#define TM_SEND_TO(a, b, c) tm_send_to(a, sizeof *a, b, c)
-TCP_MINI_FUNCTION int tm_send_to(struct tm_message_t* a, int d, void* b, int c, char* ipAddress);
+// NOTE: returns 1 if succeeded
+//       returns -1 if no code was executed (i.e. there was no match at port..
+//       .. or there was no scout w. ipAddressOrHostname for match at port)
+TCP_MINI_FUNCTION int tm_disconnect_scout(int port, char* ipAddressOrHostname);
 
-//void(*on_connected_to_us)(char* ipAddress)
-TCP_MINI_FUNCTION void tm_set_on_connected_to_us(void(*a)(char*));
-TCP_MINI_FUNCTION void tm_unset_on_connected_to_us();
+// NOTE: tm_disconnect_scout may be called from tm_set_on_scout_connected to..
+//       .. "refuse" connection
+//void(*on_scout_connected)(int port, char* ipAddressOrHostname)
+TCP_MINI_FUNCTION void tm_set_on_scout_connected(void(*a)(int, char*));
+TCP_MINI_FUNCTION void tm_unset_on_scout_connected();
 
-// NOTE: void(*a)(char* ipAddress)
-TCP_MINI_FUNCTION void tm_set_on_scout_hung_up(void(*a)(char*));
+// NOTE: void(*a)(int port, char* ipAddressOrHostname)
+TCP_MINI_FUNCTION void tm_set_on_scout_hung_up(void(*a)(int, char*));
 TCP_MINI_FUNCTION void tm_unset_on_scout_hung_up();
-#define TM_SET_ON_HUNG_UP(a) tm_set_on_scout_hung_up(a)
-#define TM_UNSET_ON_HUNG_UP() tm_unset_on_scout_hung_up()
 #endif
 
-#ifdef TCP_MINI_SCOUT
+#if (!defined TCP_MINI_MATCH_ONLY)
 struct tm_match_blob_t
 {
   union
@@ -69,67 +81,112 @@ struct tm_match_blob_t
   };
   int port;
 };
-// NOTE: ip_pattern is in format "xxx.xxx.xxx.xxx:<port>"
-// NOTE: returns 0 if no match was found, 1 if a match was found
-//       returns -1 if no code was executed
-// tm_search_for_match("192.168.*.*:1025", ..); //< will scan for LAN-hosted matches
-TCP_MINI_FUNCTION int tm_search_for_match(char* ip_pattern, struct tm_match_blob_t* a);
-//TCP_MINI_FUNCTION int tm_search_for_matches(char* ip_pattern, struct tm_match_blob_t** a, int b);
+
 // NOTE: returns 0 if failed to connect for some reason, 1 if connection was established successfully
-//       returns -1 if no code was executed*
-//       *calling this function may cause the running of initialization code that is non relevant to the function's execution (this may happen even if -1 is returned)
-TCP_MINI_FUNCTION int tm_connect(struct tm_match_blob_t a);
-// NOTE: returns 0 if disconnect happened partially, 1 if disconnect completed without issues
-//       returns -1 if no code was executed
-TCP_MINI_FUNCTION int tm_disconnect();
+//       returns -1 if no code was executed (i.e. already connected to match..
+//       .. OR establishing connection would cause # scouts to exceed..
+//       .. TM_MAXSCOUTS)
+TCP_MINI_FUNCTION int tm_connect_to_match(struct tm_match_blob_t a);
+// NOTE: returns 1 if succeeded
+//       returns -1 if no code was executed (i.e. was not connected to match)
+TCP_MINI_FUNCTION int tm_disconnect_from_match(struct tm_match_blob_t a);
 
-TCP_MINI_FUNCTION void tm_set_on_match_hung_up(void(*a)());
+//void(*on_match_hung_up)(struct tm_match_blob_t a);
+TCP_MINI_FUNCTION void tm_set_on_match_hung_up(void(*a)(struct tm_match_blob_t));
 TCP_MINI_FUNCTION void tm_unset_on_match_hung_up();
-#define TM_SET_ON_HUNG_UP(a) tm_set_on_match_hung_up(a)
-#define TM_UNSET_ON_HUNG_UP() tm_unset_on_match_hung_up()
-
-char* tm_get_ipaddress();
-//int get_port();
-#endif
-
-#if defined TCP_MINI_MATCH | defined TCP_MINI_SCOUT
-int tm_get_port(); //< will return port for "match | scout" depending on which is "active"
 #endif
 
 //**************** phase 2 - not a phase **********************
 
-#if defined TCP_MINI_MATCH
-//< NOTE: a is the exact number of bytes that the message holds.
-//void(*on_receive_from_scout)(tm_message_t* message, int a, char* ipAddress);
-TCP_MINI_FUNCTION void tm_set_on_receive_from_scout(void(*a)(struct tm_message_t*, int, char*));
-TCP_MINI_FUNCTION void tm_unset_on_receive_from_scout();
-#define TM_SET_ON_RECEIVE tm_set_on_receive_from_scout
-#define TM_UNSET_ON_RECEIVE tm_unset_on_receive_from_scout
-#endif
-
-#if defined TCP_MINI_SCOUT
-//< NOTE: a is the exact number of bytes that the message holds.
-//void(*on_receive_from_match)(tm_message_t* message, int a);
-TCP_MINI_FUNCTION void tm_set_on_receive_from_match(void(*a)(struct tm_message_t*, int));
-TCP_MINI_FUNCTION void tm_unset_on_receive_from_match();
-#define TM_SET_ON_RECEIVE tm_set_on_receive_from_match
-#define TM_UNSET_ON_RECEIVE tm_unset_on_receive_from_match
-#endif
-
-#if defined TCP_MINI_MATCH | defined TCP_MINI_SCOUT
-// NOTE: don't call poll asynchronously (it is not officially supported)
-//< NOTE: set max_messages to -1 to remove the limit (i.e. no # messages is "too much")
-//< will call on_receive for each "polled" message
-//< will return 0 if no more messages left to process or 1 if there are
-//< will return -1 if no code was executed
-TCP_MINI_FUNCTION int tm_poll(int max_messages);
-
-// NOTE: will send to all scouts if match, or to the match if scout
+#if (!defined TCP_MINI_SCOUT_ONLY)
 // NOTE: returns 1 if message was sent
+//       returns 0 if something went wrong (i.e. message is invalid)
 //       return -1 if no code was executed
-#define TM_SEND_BLOCK(a, b) tm_send(a, sizeof *a, b, sizeof b) //< alias for blocks (e.g. struct or [])
-#define TM_SEND(a,b,c) tm_send(a, sizeof *a, b, c)
-TCP_MINI_FUNCTION int tm_send(struct tm_message_t* a, int d, void* b, int c);
+TCP_MINI_FUNCTION int tm_send_to_scout(int port, char* ipAddressOrHostname, struct tm_message_t* a, int b, void* c, int d);
+#define TM_SEND_TO_SCOUT(port, ipAddressOrHostname, a, b, c) tm_send_to_scout(port, ipAddressOrHostname, (struct tm_message_t*)a, sizeof *a, b, c)
+#define TM_SEND_BLOCK_TO_SCOUT(port, ipAddressOrHostname, a, b) tm_send_to_scout(port, ipAddressOrHostname, (struct tm_message_t*)a, sizeof *a, b, sizeof *b)
+
+// NOTE: returns 1 if message was sent
+//       returns 0 if something went wrong (i.e. message is invalid)
+//       return -1 if no code was executed
+TCP_MINI_FUNCTION int tm_send_to_scouts(int port, struct tm_message_t* a, int b, void* c, int d);
+#define TM_SEND_TO_SCOUTS(port, a, b, c) tm_send_to_scouts(port, (struct tm_message_t*)a, sizeof *a, b, c)
+#define TM_SEND_BLOCK_TO_SCOUTS(port, a, b) tm_send_to_scouts(port, (struct tm_message_t*)a, sizeof *a, b, sizeof *b)
+
+//< NOTE: a is the exact number of bytes that the message holds.
+//void(*on_receive_from_scout)(int port, char* ipAddressOrHostname, tm_message_t* message, int a);
+TCP_MINI_FUNCTION void tm_set_on_receive_from_scout(void(*a)(int, char*, struct tm_message_t*, int));
+TCP_MINI_FUNCTION void tm_unset_on_receive_from_scout();
+
+// NOTE: if a scout disconnected.. will call on_scout_hung_up
+// NOTE: don't call poll asynchronously (it is not officially supported)
+// NOTE: set maxMessages to -1 to remove the limit (i.e. no # messages is "too much")
+// will call on_receive_from_scout for each "polled" message
+// will return 0 if no more messages left to process or 1 if there are
+// will return -1 if no code was executed
+TCP_MINI_FUNCTION int tm_poll_from_scout(int port, char* ipAddress, int maxMessages);
+// NOTE: if a scout disconnected.. will call on_scout_hung_up
+// NOTE: don't call poll asynchronously (it is not officially supported)
+// NOTE: set maxMessages to -1 to remove the limit (i.e. no # messages is "too much")
+// will call on_receive_from_scout for each "polled" message
+// will return 0 if no more messages left to process or 1 if there are
+// will return -1 if no code was executed
+TCP_MINI_FUNCTION int tm_poll_from_scouts(int port, int maxMessages);
+#endif
+
+#if (!defined TCP_MINI_MATCH_ONLY)
+// NOTE: returns 1 if message was sent
+//       returns 0 if something went wrong (i.e. message is invalid)
+//       return -1 if no code was executed
+TCP_MINI_FUNCTION int tm_send_to_match(struct tm_match_blob_t a, struct tm_message_t* b, int c, void* d, int e);
+#define TM_SEND_TO_MATCH(a, b, c, d) tm_send_to_match(a, (struct tm_message_t*)b, sizeof *b, c, d)
+#define TM_SEND_BLOCK_TO_MATCH(a, b, c) tm_send_to_match(a, (struct tm_message_t*)b, sizeof *b, c, sizeof *c)
+
+//< NOTE: b is the exact number of bytes that the message holds.
+//void(*on_receive_from_match)(struct tm_match_blob_t a, tm_message_t* message, int b);
+TCP_MINI_FUNCTION void tm_set_on_receive_from_match(void(*a)(struct tm_match_blob_t, struct tm_message_t*, int));
+TCP_MINI_FUNCTION void tm_unset_on_receive_from_match();
+
+// NOTE: if match disconnected.. will call on_match_hung_up
+// NOTE: don't call poll asynchronously (it is not officially supported)
+// NOTE: set maxMessages to -1 to remove the limit (i.e. no # messages is "too much")
+// will call on_receive_from_match for each "polled" message
+// will return 0 if no more messages left to process or 1 if there are
+// will return -1 if no code was executed
+TCP_MINI_FUNCTION int tm_poll_from_match(struct tm_match_blob_t a, int maxMessages);
+#endif
+
+//*****************************************************************************
+
+#if defined TCP_MINI_MATCH_ONLY
+#define tm_disconnect tm_disconnect_scout
+#define tm_set_on_hung_up(a) tm_set_on_scout_hung_up(a)
+#define tm_unset_on_hung_up() tm_unset_on_scout_hung_up()
+#define tm_poll tm_poll_from_scouts
+#define tm_poll_from tm_poll_from_scout
+#define tm_send tm_send_to_scouts
+#define TM_SEND TM_SEND_TO_SCOUTS
+#define TM_SEND_BLOCK TM_SEND_BLOCK_TO_SCOUTS
+#define tm_send_to tm_send_to_scout
+#define TM_SEND_TO TM_SEND_TO_SCOUT
+#define TM_SEND_BLOCK_TO TM_SEND_BLOCK_TO_SCOUT
+#define tm_set_on_receive tm_set_on_receive_from_scout
+#define tm_unset_on_receive tm_unset_on_receive_from_scout
+#define tm_set_on_connected tm_set_on_scout_connected
+#define tm_unset_on_connected tm_unset_on_scout_connected
+#endif
+
+#if defined TCP_MINI_SCOUT_ONLY
+#define tm_connect tm_connect_to_match
+#define tm_disconnect tm_disconnect_from_match
+#define tm_set_on_hung_up(a) tm_set_on_match_hung_up(a)
+#define tm_unset_on_hung_up() tm_unset_on_match_hung_up()
+#define tm_poll tm_poll_from_match
+#define tm_send tm_send_to_match
+#define TM_SEND TM_SEND_TO_MATCH
+#define TM_SEND_BLOCK TM_SEND_BLOCK_TO_MATCH
+#define tm_set_on_receive tm_set_on_receive_from_match
+#define tm_unset_on_receive tm_unset_on_receive_from_match
 #endif
 
 #endif
