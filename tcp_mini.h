@@ -158,8 +158,8 @@ TCP_MINI_FUNCTION int tm_poll_from_match(struct tm_match_blob_t a, int maxMessag
 
 #if defined TCP_MINI_MATCH_ONLY
 #define tm_disconnect tm_disconnect_scout
-#define tm_set_on_hung_up(a) tm_set_on_scout_hung_up(a)
-#define tm_unset_on_hung_up() tm_unset_on_scout_hung_up()
+#define tm_set_on_hung_up tm_set_on_scout_hung_up
+#define tm_unset_on_hung_up tm_unset_on_scout_hung_up
 #define tm_poll tm_poll_from_scouts
 #define tm_poll_from tm_poll_from_scout
 #define tm_send tm_send_to_scouts
@@ -177,8 +177,8 @@ TCP_MINI_FUNCTION int tm_poll_from_match(struct tm_match_blob_t a, int maxMessag
 #if defined TCP_MINI_SCOUT_ONLY
 #define tm_connect tm_connect_to_match
 #define tm_disconnect tm_disconnect_from_match
-#define tm_set_on_hung_up(a) tm_set_on_match_hung_up(a)
-#define tm_unset_on_hung_up() tm_unset_on_match_hung_up()
+#define tm_set_on_hung_up tm_set_on_match_hung_up
+#define tm_unset_on_hung_up tm_unset_on_match_hung_up
 #define tm_poll tm_poll_from_match
 #define tm_send tm_send_to_match
 #define TM_SEND TM_SEND_TO_MATCH
