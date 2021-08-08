@@ -41,24 +41,9 @@ inline void* operator new[](std::size_t a)
 	return malloc(a);
 }
 [[TCP_MINI_ALWAYS_INLINE]]
-inline void* operator new(std::size_t a) //< can throw std::bad_alloc?
-{
-	return malloc(a);
-}
-[[TCP_MINI_ALWAYS_INLINE]]
-inline void operator delete(void* a)
-{
-    free(a);
-}
-[[TCP_MINI_ALWAYS_INLINE]]
 inline void operator delete(void* a, std::size_t)
 {
     free(a); //< there is no check here on purpose, please catch this issue elsewhere
-}
-[[TCP_MINI_ALWAYS_INLINE]]
-inline void operator delete[](void* a)
-{
-	free(a);
 }
 
 namespace
