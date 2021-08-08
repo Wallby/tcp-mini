@@ -352,7 +352,7 @@ extern "C" int tm_become_a_match(int port)
 	matches = (match_t*)new char[sizeof(match_t) * (numMatches + 1)];
 	if(a != NULL)
 	{
-		memcpy(matches, a, sizeof(match_t) * (numMatches));
+		memcpy(matches, a, sizeof(match_t) * numMatches);
 		delete a;
 	}
 #endif
