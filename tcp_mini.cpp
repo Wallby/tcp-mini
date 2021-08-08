@@ -104,14 +104,14 @@ namespace
 	template<typename T>
 	void copy_array_except_element_at(int length, T* destination, T* source, int index)
 	{
-		printf("length %i\n", length);
+		//printf("length %i\n", length);
 
 		int numElementsBeforeIndex = index + 1 - 1;
 
 		int numElementsAfterIndex = length - (index + 1);
 
-		printf("numElementsBeforeIndex %i\n", numElementsBeforeIndex);
-		printf("numElementsAfterIndex %i\n", numElementsAfterIndex);
+		//printf("numElementsBeforeIndex %i\n", numElementsBeforeIndex);
+		//printf("numElementsAfterIndex %i\n", numElementsAfterIndex);
 
 		int a = 0;
 		if(numElementsBeforeIndex > 0)
