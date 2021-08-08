@@ -7,8 +7,7 @@
 //       scout will no longer be scout if match disconnects
 
 // NOTE: "endianness" of..
-//       .. buffers is left-to-right
-//       .. "integer variables" is left-to-right decreases
+//       .. "integer variables" (used internally) is right-to-left (i.e. right is LSB)
 
 #ifdef __cplusplus
 #define TCP_MINI_FUNCTION extern "C"
