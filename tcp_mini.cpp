@@ -110,7 +110,7 @@ namespace
 
 #define MAX_MESSAGE_T struct { char b[TCP_MINI_MAX_MESSAGE_SIZE]; } //< NOTE: b to avoid confusion (don't use this directly)
 
-#define TIMEOUT max(CLOCKS_PER_SEC / 2, 1) //< i.e. "wait max half a second"
+#define TIMEOUT max((int)CLOCKS_PER_SEC / 2, 1) //< i.e. "wait max half a second"
 
 //*********************************************************
 
@@ -663,6 +663,7 @@ namespace
 		//g += d;
 
 #if defined(__linux__)
+		// NOTE: should loop until all bytes are written (i.e. if write returns "<f" or -1)..?
 		write(socket, buffer, f);
 #else
 		send(socket, buffer, f, 0);
@@ -758,10 +759,16 @@ namespace
 				}
 				else
 				{
+					// IDEA: alternatively.. if < sizeof(int) bytes are..
+					//       .. available.. disconnect the scout..? (i.e...
+					//       .. assume that message is incomplete) if..
+					//       .. arriving takes "that long"
 					WAIT_UNTIL_CAN_READ(sizeof(int),);
 
 #if defined(__linux__)
-					/*int e =*/ read(socket, &l, sizeof(int));
+					// NOTE: should never return -1..?
+					// NOTE: not sure if read here can be interrupted by signal (perhaps loop to make sure read finished..?)
+					/*int e =*/ read(socket, &c, sizeof(int));
 #else
 					e.buf = (char*)&c;
 					e.len = sizeof(int);
@@ -776,18 +783,36 @@ namespace
 				// IDEA: read message payload in "chunks" (i.e. read at..
 				//       .. least sizeof(int) bytes every "time" (if not..
 				//       .. atleast that many bytes can be read.. disconnect)
-				//WAIT_UNTIL_CAN_READ(/*sizeof(int)*/, /*i.e. cause disconnect*/);
-				//WAIT_UNTIL_CAN_READ(/*remainder*/, /*store bytes already read in "some buffer, and resume "next time"*/);
-				// e.g...
+				// NOTE: reading sizeof(int) chunks every time is to prevent..
+				//       .. a scout stalling a match (or vice versa) by..
+				//       .. sending an incomplete message
 				// struct match_t
 				// {
 				//   //...
-				//   int sizeOfTooBigMessage; //< ~sizeOfTimedOutMessage~
-				//   void* bufferForTooBigMessage;
+				//   //~sizeOfTimedOutMessage~
+				//   int numBytesOfNextMessageLeftToRead; //< i.e. initially "c" (i.e. size bytes)
+				//   void* bufferForNextMessage;
 				// };
+				//int f = read(socket, d, /*numBytesOfNextMessageLeftToRead*/);
+				//if(/*numBytesOfNextMessageLeftToRead*/ == f)
+				//{
+				//	// i.e. done
+				//}
+				//else if(f < sizeof(int))
+				//{
+				//	// disconnect scout (i.e. there are more bytes left to..
+				//	// .. read, but only sizeof(int) bytes arrived since last poll (i.e. too slow)
+				//}
+				//
+				///*numBytesOfNextMessageLeftToRead*/ -= f;
+
 				WAIT_UNTIL_CAN_READ(c, *sizeOfMessageThatTimedOut = c;);
 #if defined(__linux__)
-				/*int f =*/ read(socket, n, c);
+				// NOTE: should never return -1..?
+				// NOTE: see "IDEA:" above -> i.e. to read as much as..
+				//       .. possible call read once w. non blocking..?)
+				//       then subtract f from /*numBytesOfNextMessageLeftToRead*/..?
+				/*int f =*/ read(socket, d, c);
 #else
 				e.buf = d;
 				e.len = c;
@@ -1301,7 +1326,7 @@ extern "C" int tm_poll_from_scouts(int port, int maxMessages)
 
 	poll_for_match(match);
 
-	int bMoreMessagesToProcess;
+	int bMoreMessagesToProcess = 0;
 	if(maxMessages == -1)
 	{
 		for(int i = 0; i < match->numConnections; ++i)
