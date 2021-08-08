@@ -101,14 +101,14 @@ TCP_MINI_FUNCTION void tm_unset_on_match_hung_up();
 //       return -1 if no code was executed
 TCP_MINI_FUNCTION int tm_send_to_scout(int port, char* ipAddressOrHostname, struct tm_message_t* a, int b, void* c, int d);
 #define TM_SEND_TO_SCOUT(port, ipAddressOrHostname, a, b, c) tm_send_to_scout(port, ipAddressOrHostname, (struct tm_message_t*)a, sizeof *a, b, c)
-#define TM_SEND_BLOCK_TO_SCOUT(port, ipAddressOrHostname, a, b) tm_send_to_scout(port, ipAddressOrHostname, (struct tm_message_t*)a, sizeof *a, b, sizeof *b)
+#define TM_SEND_BLOCK_TO_SCOUT(port, ipAddressOrHostname, a, b) tm_send_to_scout(port, ipAddressOrHostname, (struct tm_message_t*)a, sizeof *a, b, sizeof b)
 
 // NOTE: returns 1 if message was sent
 //       returns 0 if something went wrong (i.e. message is invalid)
 //       return -1 if no code was executed
 TCP_MINI_FUNCTION int tm_send_to_scouts(int port, struct tm_message_t* a, int b, void* c, int d);
 #define TM_SEND_TO_SCOUTS(port, a, b, c) tm_send_to_scouts(port, (struct tm_message_t*)a, sizeof *a, b, c)
-#define TM_SEND_BLOCK_TO_SCOUTS(port, a, b) tm_send_to_scouts(port, (struct tm_message_t*)a, sizeof *a, b, sizeof *b)
+#define TM_SEND_BLOCK_TO_SCOUTS(port, a, b) tm_send_to_scouts(port, (struct tm_message_t*)a, sizeof *a, b, sizeof b)
 
 //< NOTE: a is the exact number of bytes that the message holds.
 //void(*on_receive_from_scout)(int port, char* ipAddressOrHostname, tm_message_t* message, int a);
@@ -137,7 +137,7 @@ TCP_MINI_FUNCTION int tm_poll_from_scouts(int port, int maxMessages);
 //       return -1 if no code was executed
 TCP_MINI_FUNCTION int tm_send_to_match(struct tm_match_blob_t a, struct tm_message_t* b, int c, void* d, int e);
 #define TM_SEND_TO_MATCH(a, b, c, d) tm_send_to_match(a, (struct tm_message_t*)b, sizeof *b, c, d)
-#define TM_SEND_BLOCK_TO_MATCH(a, b, c) tm_send_to_match(a, (struct tm_message_t*)b, sizeof *b, c, sizeof *c)
+#define TM_SEND_BLOCK_TO_MATCH(a, b, c) tm_send_to_match(a, (struct tm_message_t*)b, sizeof *b, c, sizeof c)
 
 //< NOTE: b is the exact number of bytes that the message holds.
 //void(*on_receive_from_match)(struct tm_match_blob_t a, tm_message_t* message, int b);
