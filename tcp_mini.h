@@ -52,7 +52,7 @@ TCP_MINI_FUNCTION int tm_stop_being_a_match(int port);
 //       .. or there was no scout w. ipAddressOrHostname for match at port)
 TCP_MINI_FUNCTION int tm_disconnect_scout(int port, char* ipAddressOrHostname);
 
-// NOTE: tm_disconnect_scout may be called from tm_set_on_scout_connected to..
+// NOTE: tm_disconnect_scout may be called from on_scout_connected to..
 //       .. "refuse" connection
 //void(*on_scout_connected)(int port, char* ipAddressOrHostname)
 TCP_MINI_FUNCTION void tm_set_on_scout_connected(void(*a)(int, char*));
