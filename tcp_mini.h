@@ -54,11 +54,11 @@ TCP_MINI_FUNCTION int tm_disconnect_scout(int port, char* ipAddressOrHostname);
 
 // NOTE: tm_disconnect_scout may be called from on_scout_connected to..
 //       .. "refuse" connection
-//void(*on_scout_connected)(int port, char* ipAddressOrHostname)
+//void(*on_scout_connected)(int port, char* ipAddressOrHostname);
 TCP_MINI_FUNCTION void tm_set_on_scout_connected(void(*a)(int, char*));
 TCP_MINI_FUNCTION void tm_unset_on_scout_connected();
 
-// NOTE: void(*a)(int port, char* ipAddressOrHostname)
+// void(*on_scout_hung_up)(int port, char* ipAddressOrHostname);
 TCP_MINI_FUNCTION void tm_set_on_scout_hung_up(void(*a)(int, char*));
 TCP_MINI_FUNCTION void tm_unset_on_scout_hung_up();
 #endif
