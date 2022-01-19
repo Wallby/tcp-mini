@@ -1,0 +1,11 @@
+#! /bin/sh
+
+# 1. clean old makefile (if any)
+rm -f Makefile
+
+# 2. obtain latest makefile
+eval "git archive --format zip --output makefile-for-linux.zip makefile-for-linux" # wrapped in eval so that syntax highlighting in xed doesn't break
+
+# unzip will prompt if file already exists
+unzip "makefile-for-linux.zip"
+rm "makefile-for-linux.zip"
