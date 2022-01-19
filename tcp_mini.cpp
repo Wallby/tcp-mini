@@ -41,24 +41,9 @@ inline void* operator new[](std::size_t a)
 	return malloc(a);
 }
 [[TCP_MINI_ALWAYS_INLINE]]
-inline void* operator new(std::size_t a) //< can throw std::bad_alloc?
-{
-	return malloc(a);
-}
-[[TCP_MINI_ALWAYS_INLINE]]
-inline void operator delete(void* a)
-{
-    free(a);
-}
-[[TCP_MINI_ALWAYS_INLINE]]
 inline void operator delete(void* a, std::size_t)
 {
     free(a); //< there is no check here on purpose, please catch this issue elsewhere
-}
-[[TCP_MINI_ALWAYS_INLINE]]
-inline void operator delete[](void* a)
-{
-	free(a);
 }
 
 namespace
@@ -119,14 +104,14 @@ namespace
 	template<typename T>
 	void copy_array_except_element_at(int length, T* destination, T* source, int index)
 	{
-		printf("length %i\n", length);
+		//printf("length %i\n", length);
 
 		int numElementsBeforeIndex = index + 1 - 1;
 
 		int numElementsAfterIndex = length - (index + 1);
 
-		printf("numElementsBeforeIndex %i\n", numElementsBeforeIndex);
-		printf("numElementsAfterIndex %i\n", numElementsAfterIndex);
+		//printf("numElementsBeforeIndex %i\n", numElementsBeforeIndex);
+		//printf("numElementsAfterIndex %i\n", numElementsAfterIndex);
 
 		int a = 0;
 		if(numElementsBeforeIndex > 0)
@@ -367,7 +352,7 @@ extern "C" int tm_become_a_match(int port)
 	matches = (match_t*)new char[sizeof(match_t) * (numMatches + 1)];
 	if(a != NULL)
 	{
-		memcpy(matches, a, sizeof(match_t) * (numMatches));
+		memcpy(matches, a, sizeof(match_t) * numMatches);
 		delete a;
 	}
 #endif
