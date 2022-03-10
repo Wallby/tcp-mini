@@ -1,4 +1,4 @@
-tcp-mini: tcp_mini.o
+libtcp-mini.lib: tcp_mini.o
 	if exist libtcp-mini.lib del libtcp-mini.lib
 	ar rcs libtcp-mini.lib tcp_mini.o
 
