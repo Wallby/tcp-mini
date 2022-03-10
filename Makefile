@@ -1,4 +1,4 @@
-tcp-mini: tcp_mini.o
+libtcp-mini.a: tcp_mini.o
 	rm -f libtcp-mini.a
 	ar rcs libtcp-mini.a tcp_mini.o
 
