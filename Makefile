@@ -8,3 +8,5 @@ tcp_mini.o: tcp_mini.cpp
 clean:
 	if exist libtcp-mini.lib del libtcp-mini.lib
 	if exist tcp_mini.o del tcp_mini.o
+# if linux leftover.. also remove linux leftover..
+	if exist libtcp-mini.a del libtcp-mini.a
