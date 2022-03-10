@@ -7,3 +7,5 @@ tcp_mini.o: tcp_mini.cpp
 
 clean:
 	rm -f libtcp-mini.a tcp_mini.o
+# if windows leftover.. also remove windows leftover..
+	rm -f libtcp-mini.lib
