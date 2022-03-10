@@ -32,6 +32,7 @@ int ioctl(SOCKET a, __LONG32 b, u_long* c)
 #error "unsupported platform"
 #endif
 
+
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #define TCP_MINI_ALWAYS_INLINE gnu::always_inline
 
@@ -41,9 +42,14 @@ inline void* operator new[](std::size_t a)
 	return malloc(a);
 }
 [[TCP_MINI_ALWAYS_INLINE]]
+inline void operator delete[](void* a)
+{
+	free(a);
+}
+[[TCP_MINI_ALWAYS_INLINE]]
 inline void operator delete(void* a, std::size_t)
 {
-    free(a); //< there is no check here on purpose, please catch this issue elsewhere
+	free(a); //< there is no check here on purpose, please catch this issue elsewhere
 }
 
 namespace
@@ -1434,6 +1440,7 @@ extern "C" int tm_poll_from_match(tm_match_blob_t a, int maxMessages)
 
 			if(bTimedOut == 1)
 			{
+				// TODO: seems that in linux disconnect -> instant "time out"..?
 				printf("scout %s:%i timed out\n", c->scout->otherIpAddressOrHostname, c->scout->port);
 			}
 
