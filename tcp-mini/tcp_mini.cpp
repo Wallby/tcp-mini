@@ -34,19 +34,19 @@ int ioctl(SOCKET a, __LONG32 b, u_long* c)
 
 
 #pragma GCC diagnostic ignored "-Wsign-compare"
-#define TCP_MINI_ALWAYS_INLINE gnu::always_inline
+#define ALWAYS_INLINE gnu::always_inline
 
-[[TCP_MINI_ALWAYS_INLINE]]
+[[ALWAYS_INLINE]]
 inline void* operator new[](std::size_t a)
 {
 	return malloc(a);
 }
-[[TCP_MINI_ALWAYS_INLINE]]
+[[ALWAYS_INLINE]]
 inline void operator delete[](void* a)
 {
 	free(a);
 }
-[[TCP_MINI_ALWAYS_INLINE]]
+[[ALWAYS_INLINE]]
 inline void operator delete(void* a, std::size_t)
 {
 	free(a); //< there is no check here on purpose, please catch this issue elsewhere
@@ -98,8 +98,6 @@ namespace
 	  return b & ~c;
 	}
 }
-
-#define MAX_MESSAGE_T struct { char b[TCP_MINI_MAX_MESSAGE_SIZE]; } //< NOTE: b to avoid confusion (don't use this directly)
 
 #define TIMEOUT max((int)CLOCKS_PER_SEC / 2, 1) //< i.e. "wait max half a second"
 
@@ -289,7 +287,7 @@ namespace
 
 //*********************************************************
 
-//#if (!defined TCP_MINI_SCOUT_ONLY)
+//#if (!defined TM_SCOUT_ONLY)
 namespace
 {
 	void (*on_scout_connected)(int port, char* ipAddress);
@@ -489,7 +487,7 @@ extern "C" int tm_disconnect_scout(int port, char* ipAddressOrHostname)
 }
 //#endif
 
-//#if (!defined TCP_MINI_MATCH_ONLY)
+//#if (!defined TM_MATCH_ONLY)
 namespace
 {
 	void(*on_match_hung_up)(tm_match_blob_t);
@@ -630,10 +628,14 @@ namespace
 			return 0; //< message without initial "type" variable is not allowed
 		}
 
-		if((a + b) > TCP_MINI_MAX_MESSAGE_SIZE)
+		// not sure if there is such as a "too large message for TCP"
+		// if so.. not sure if the socket functions handle this or not
+		/*
+		if((a + b) > /*...<*>/)
 		{
 			return 0;
 		}
+		*/
 
 		return 1;
 	}
@@ -829,7 +831,7 @@ namespace
 	}
 }
 
-//#if (!defined TCP_MINI_SCOUT_ONLY)
+//#if (!defined TM_SCOUT_ONLY)
 namespace
 {
 	void(*on_receive_from_scout)(int port, char* ipAddressOrHostname, tm_message_t* message, int a);
@@ -912,7 +914,7 @@ extern "C" int tm_send_to_scouts(int port, tm_message_t* a, int b, void* c, int 
 }
 //#endif
 
-//#if (!defined TCP_MINI_MATCH_ONLY)
+//#if (!defined TM_MATCH_ONLY)
 namespace
 {
 	void(*on_receive_from_match)(struct tm_match_blob_t a, tm_message_t* message, int b);
