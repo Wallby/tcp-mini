@@ -1,38 +1,35 @@
-ifndef OS # linux
-LIBRARY_EXTENSION=.a
-RM=rm -f $(1)
-else ifeq ($(OS), Windows_NT) # windows
-LIBRARY_EXTENSION=.lib
-RM=if exist $(1) del $(1)
-else
-$(error os not supported)
+include makefile_mini.mk
+
+
+$(call mm_start_parameters_t,a)
+a.ignoredbinaries:=^test$(MM_EXECUTABLE_EXTENSION)$$
+$(call mm_start,a)
+
+$(call mm_add_library_parameters_t,b)
+b.filetypes:=EMMLibraryfiletype_Static
+b.cpp:=tcp_mini.cpp
+b.h:=tcp_mini.h
+b.hpp:=tcp_mini.hpp
+$(call mm_add_library,tcp-mini,b)
+
+$(call mm_add_executable_parameters_t,c)
+c.c:=test.c
+#c.libraries:=tcp-mini test-mini
+c.libraries:=tcp-mini
+c.libFolders:=../test-mini/
+c.hFolders:=../test-mini/
+c.lib:=test-mini
+ifeq ($(MM_OS),windows)
+c.lib+=ws2_32
+else #< else ifeq ($(MM_OS),chromeos)
+c.lib+=pthread
 endif
+c.gccOrG++:=-Wl,--wrap=malloc,--wrap=free,--wrap=main
+$(call mm_add_executable,test,c)
 
-libtcp-mini$(LIBRARY_EXTENSION): tcp_mini.o
-	$(call RM,libtcp-mini$(LIBRARY_EXTENSION))
-	ar rcs $@ $<
+$(call mm_add_test_parameters_t,d)
+d.executables:=test
+$(call mm_add_test,test,d)
 
-tcp_mini.o: tcp_mini.cpp tcp_mini.h
-	g++ -c $<
-
-test$(EXECUTABLE_EXTENSION): test.o libtcp-mini$(LIBRARY_EXTENSION) ../test-mini/libtest-mini$(LIBRARY_EXTENSION)
-	gcc -Wl,--wrap=malloc,--wrap=free,--wrap=main -o test$(EXECUTABLE_EXTENSION) test.o -L./ -ltcp-mini -L../test-mini -ltest-mini
-
-test.o: test.c tcp_mini.h ../test-mini/test_mini.h
-	gcc -c test.c -I./ -I../test-mini/
-
-#******************************************************************************
-
-.PHONY: release
-release: test$(EXECUTABLE_EXTENSION)
-	./$<
-
-.PHONY: clean
-clean:
-	$(call RM,tcp_mini.o)
-	$(call RM,libtcp-mini.a)
-	$(call RM,libtcp-mini.lib)
-	
-	$(call RM,test.o)
-	$(call RM,test)
-	$(call RM,test.exe)
+$(call mm_stop_parameters_t,e)
+$(call mm_stop,e)

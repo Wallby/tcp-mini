@@ -150,11 +150,16 @@ void test_3_match(void* a)
 #endif
 	}
 
+	int numTimesPolled = 0;
 	while(test_3_scout_connected == 0)
 	{
-		// NOTE: e should be displayed once (for connected)
-		fputs("e\n", stdout);
 		tm_poll_from_scouts(testPort, -1);
+		++numTimesPolled;
+	}
+	if(numTimesPolled > 1)
+	{
+		// NOTE: expecting to poll once (for connected)
+		printf("warning: match polled %i times (expected to poll once)\n", numTimesPolled);
 	}
 
 	struct tm_message_t c;
@@ -202,15 +207,21 @@ void test_3_scout(void* a)
 		}
 	}
 
+	int numTimesPolled = 0;
 	while(test_3_match_hung_up == 0)
 	{
-		// NOTE: d should be displayed once (for message received + to detect hang up)
-		fputs("d\n", stdout);
 		pthread_mutex_lock(&test_3_tcp_mini_mutex);
 		tm_poll_from_match(test_3_a, -1);
 		pthread_mutex_unlock(&test_3_tcp_mini_mutex);
 
 		//sleep(1);
+		++numTimesPolled;
+	}
+	if(numTimesPolled > 1)
+	{
+		// NOTE: expecting to poll once (for message received + to detect..
+		//       .. hang up)
+		printf("warning: scout polled %i times (expected to poll once)\n", numTimesPolled);
 	}
 
 	tm_unset_on_match_hung_up();
@@ -389,16 +400,21 @@ void test_2_match(void* a)
 #endif
 	}
 
+	int numTimesPolled = 0;
 	while(!(test_2_scout_connected == 1 && test_2_scout_hung_up == 1))
 	{
-		// NOTE: c should be displayed twice (i.e. once for connected, second time for message received)..?
-		fputs("c\n", stdout);
-
 		pthread_mutex_lock(&test_2_tcp_mini_mutex);
 		tm_poll_from_scouts(testPort, -1);
 		pthread_mutex_unlock(&test_2_tcp_mini_mutex);
 
 		//sleep(1);
+		++numTimesPolled;
+	}
+	if(numTimesPolled > 2)
+	{
+		// NOTE: expecting to poll twice (i.e. once for connected, second..
+		//       .. time for message received)..?
+		printf("warning: match polled %i times (expected to poll 2 times)\n", numTimesPolled);
 	}
 
 	pthread_mutex_lock(&test_2_tcp_mini_mutex);
@@ -735,11 +751,11 @@ int main(int argc, char** argv)
 	}
 #endif
 
-    int a = tests();    
+    int b = tests();    
 
 #if defined(_WIN32)
 	WSACleanup();
 #endif
 
-    return a;
+    return b;
 }
